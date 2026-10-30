@@ -1,7 +1,7 @@
 // Simpan proyek di IndexedDB supaya tidak hilang saat side panel ditutup
 // (gambar & audio terlalu besar untuk chrome.storage).
 
-const DB = 'tuyul-content';
+const DB = 'tuyul-content'; // nama lama sengaja dipertahankan supaya project yang tersimpan tidak hilang
 const STORE = 'kv';
 
 function open() {

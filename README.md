@@ -1,14 +1,14 @@
-# Tuyul Content (Chrome extension, MV3)
+# Klipin 🎬 (Chrome extension, MV3)
 
 Judul → naskah → suara → scene → gambar otomatis di Google Flow → render MP4, semua dari side panel Chrome.
 Gratis & open source (MIT). Tidak ada server: semua proses (potong jeda, sinkronisasi, render video) berjalan di browser kamu.
 
 ## Pasang
 1. Download: tombol hijau **Code → Download ZIP** di halaman ini, lalu ekstrak.
-   (Atau `git clone https://github.com/wildanlsfs/tuyul-content.git`)
+   (Atau `git clone https://github.com/wildanlsfs/klipin.git`)
 2. Buka `chrome://extensions` → aktifkan **Developer mode** (kanan atas) → **Load unpacked** → pilih folder hasil ekstrak
    (folder yang berisi `manifest.json`).
-3. Klik ikon extension → side panel terbuka. Isi minimal satu API key di ⚙︎
+3. Klik ikon Klipin → side panel terbuka. Isi minimal satu API key di ⚙︎
    (Gemini gratis: https://aistudio.google.com/apikey).
 4. Update ke versi baru: download lagi, timpa folder lama, lalu klik ↻ di `chrome://extensions`.
 

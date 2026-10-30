@@ -154,7 +154,7 @@ async function withFallback(s, task, fn) {
       return await fn(list[k]);
     } catch (e) {
       lastErr = e;
-      console.warn(`[Tuyul] ${list[k].name} gagal (${task})`, e);
+      console.warn(`[Klipin] ${list[k].name} gagal (${task})`, e);
       if (k < list.length - 1) notify(`${list[k].name} gagal: ${e.message.slice(0, 90)} → coba ${list[k + 1].name}`);
     }
   }
@@ -202,7 +202,7 @@ function compatHeaders(c, json = true) {
   return {
     ...(json ? { 'Content-Type': 'application/json' } : {}),
     ...(c.key ? { Authorization: `Bearer ${c.key}` } : {}),
-    ...(c.preset === 'openrouter' ? { 'X-Title': 'Tuyul Content' } : {}),
+    ...(c.preset === 'openrouter' ? { 'X-Title': 'Klipin' } : {}),
   };
 }
 

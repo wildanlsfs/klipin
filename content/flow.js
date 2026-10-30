@@ -1,4 +1,4 @@
-// Tuyul Content — otomasi Google Flow (flow.google.com / labs.google/fx/tools/flow).
+// Klipin — otomasi Google Flow (flow.google.com / labs.google/fx/tools/flow).
 // Menerima prompt dari side panel, mengetik ke kolom prompt Flow, menekan tombol generate,
 // menunggu gambar baru muncul, lalu mengirim gambarnya kembali ke side panel.
 (() => {
@@ -164,7 +164,7 @@
       badge.style.cssText = 'position:fixed;z-index:2147483647;bottom:16px;left:16px;padding:10px 14px;border-radius:12px;background:#111;color:#fff;font:600 13px system-ui;box-shadow:0 6px 24px rgba(0,0,0,.35);border:1px solid #333;max-width:360px;pointer-events:none';
       document.body.appendChild(badge);
     }
-    badge.textContent = `👻 Tuyul Content — ${text}`;
+    badge.textContent = `🎬 Klipin — ${text}`;
     badge.style.display = text ? 'block' : 'none';
   }
 
