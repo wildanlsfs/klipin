@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tuyul Content</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">👻</span>
+      <div>
+        <div class="name">Tuyul Content</div>
+        <div class="tag" id="statusLine">Judul → Video jadi</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="icon-btn" id="newProjectBtn" title="Proyek baru">＋</button>
+      <button class="icon-btn" id="settingsBtn" title="Pengaturan API">⚙︎</button>
+    </div>
+  </header>
+
+  <nav class="stepper" id="stepper">
+    <button data-step="1"><b>1</b>Judul</button>
+    <button data-step="2"><b>2</b>Naskah</button>
+    <button data-step="3"><b>3</b>Scene</button>
+    <button data-step="4"><b>4</b>Gambar</button>
+    <button data-step="5"><b>5</b>Render</button>
+  </nav>
+
+  <main>
+    <!-- ============ STEP 1: JUDUL ============ -->
+    <section class="step" data-step="1">
+      <h2>Mau bikin video tentang apa?</h2>
+      <label for="rawTitle">Judul / ide mentah</label>
+      <textarea id="rawTitle" rows="3" placeholder="Contoh: Kenapa kebakaran hutan di Kalimantan susah sekali dipadamkan? Siapa dalang utamanya?"></textarea>
+
+      <details class="card" id="ideaBank">
+        <summary>📚 100 ide siap pakai</summary>
+        <div class="chips" id="ideaCats"></div>
+        <div class="list" id="ideaList"></div>
+      </details>
+
+      <button class="btn primary" id="expandBtn">✨ Kembangkan Judul</button>
+      <div class="options" id="titleOptions"></div>
+
+      <div class="footer-nav">
+        <button class="btn primary" data-next>Lanjut ke Naskah →</button>
+      </div>
+    </section>
+
+    <!-- ============ STEP 2: NASKAH & SUARA ============ -->
+    <section class="step" data-step="2">
+      <div class="picked">🎯 <span id="pickedTitle">—</span></div>
+
+      <div class="grid2">
+        <div>
+          <label for="format">Format konten</label>
+          <select id="format"></select>
+        </div>
+        <div>
+          <label for="narrStyle">Gaya narasi</label>
+          <select id="narrStyle"></select>
+        </div>
+        <div>
+          <label for="minutes">Durasi</label>
+          <select id="minutes"></select>
+        </div>
+        <div>
+          <label>Bahasa</label>
+          <div class="seg" id="langSeg">
+            <button data-v="id">Indonesia</button>
+            <button data-v="en">English</button>
+          </div>
+        </div>
+      </div>
+      <p class="hint" id="formatHint"></p>
+
+      <button class="btn primary" id="writeScriptBtn">📝 Tulis Naskah dari Judul</button>
+
+      <div class="label-row">
+        <label for="script">Naskah</label>
+        <span class="meta" id="scriptMeta"></span>
+      </div>
+      <textarea id="script" rows="12" placeholder="Naskah akan muncul di sini. Boleh diedit atau tempel naskah sendiri."></textarea>
+
+      <div class="card">
+        <h3>🎙️ Suara / Voiceover</h3>
+        <p class="hint">Buat suara gratis di Google AI Studio → <i>Generate speech</i>. Salin style instruction &amp; naskah, pilih suara, Run, lalu download dan tarik file audionya ke kotak di bawah.</p>
+        <div class="label-row">
+          <label for="styleInstr">Style instruction</label>
+          <button class="link" id="copyStyleBtn">Salin</button>
+        </div>
+        <textarea id="styleInstr" rows="3"></textarea>
+        <div class="row">
+          <button class="btn" id="copyScriptBtn">📋 Salin Naskah</button>
+          <button class="btn" id="openStudioBtn">↗ Buka Google AI Studio</button>
+        </div>
+
+        <div class="label-row">
+          <label>Mesin suara &amp; narator</label>
+          <button class="link hidden" id="refreshVoicesBtn">↻ muat suara</button>
+        </div>
+        <div class="seg wrap" id="ttsEngineSeg"></div>
+        <p class="hint" id="ttsHint"></p>
+        <div class="voices" id="voices"></div>
+        <button class="btn ghost small" id="ttsApiBtn">⚡ Generate suara langsung via API</button>
+        <div class="progress hidden" id="ttsProgress"><div></div></div>
+
+        <div class="drop" id="audioDrop">
+          <input type="file" id="audioFile" accept="audio/*" hidden />
+          <div class="drop-empty">⬇︎ Tarik file audio ke sini<br /><small>atau klik untuk pilih (wav / mp3 / m4a)</small></div>
+          <div class="drop-ready hidden">
+            <div class="ok">✅ Audio siap · <span id="audioDur"></span></div>
+            <audio id="audioPlayer" controls></audio>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-nav">
+        <button class="btn" data-prev>← Kembali</button>
+        <button class="btn primary" data-next>Lanjut →</button>
+      </div>
+    </section>
+
+    <!-- ============ STEP 3: VISUAL & SCENE ============ -->
+    <section class="step" data-step="3">
+      <label>Gaya visual</label>
+      <div class="styles" id="visualStyles"></div>
+
+      <div class="grid2">
+        <div>
+          <label>Rasio</label>
+          <div class="seg" id="ratioSeg"></div>
+        </div>
+        <div>
+          <label for="sceneSec">Panjang per scene</label>
+          <select id="sceneSec">
+            <option value="4">± 4 detik</option>
+            <option value="6">± 6 detik</option>
+            <option value="8">± 8 detik</option>
+            <option value="12">± 12 detik</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="label-row">
+          <h3>✂️ Potong jeda / diam</h3>
+          <span class="meta" id="trimMeta"></span>
+        </div>
+        <label for="maxPause">Jeda maksimal: <b id="maxPauseVal"></b></label>
+        <input type="range" id="maxPause" min="0.15" max="1" step="0.05" />
+        <button class="btn" id="trimBtn">✂️ Potong Jeda Sekarang</button>
+        <audio id="trimPlayer" class="hidden" controls></audio>
+      </div>
+
+      <div class="row">
+        <button class="btn primary" id="transcribeBtn">🎧 Transkrip otomatis + buat scene</button>
+        <button class="btn primary" id="fromScriptBtn">📄 Buat scene dari naskah</button>
+        <button class="btn" id="resyncBtn3" title="Tanpa mengubah teks/gambar scene">🔁 Sinkronkan ulang timing</button>
+      </div>
+      <div class="progress hidden" id="sceneProgress"><div></div></div>
+      <p class="hint" id="sceneInfo"></p>
+      <div class="scenes" id="sceneList"></div>
+
+      <div class="footer-nav">
+        <button class="btn" data-prev>← Kembali</button>
+        <button class="btn primary" data-next>Lanjut ke Gambar →</button>
+      </div>
+    </section>
+
+    <!-- ============ STEP 4: GAMBAR (FLOW) ============ -->
+    <section class="step" data-step="4">
+      <div class="card flow-card">
+        <div class="label-row">
+          <h3>🌊 Google Flow</h3>
+          <span class="pill" id="flowStatus">memeriksa…</span>
+        </div>
+        <ol class="hint tight">
+          <li>Buka Flow, masuk ke sebuah project.</li>
+          <li>Ubah mode ke <b>gambar</b> (Image), atur output per prompt = 1, rasio sama dengan pilihanmu.</li>
+          <li>Klik <b>Kirim Semua ke Flow</b>, lalu biarkan berjalan sendiri.</li>
+        </ol>
+        <div class="row">
+          <button class="btn" id="openFlowBtn">↗ Buka Google Flow</button>
+          <button class="btn" id="checkFlowBtn">↻ Cek koneksi</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <button class="btn primary" id="sendAllBtn">🚀 Kirim Semua ke Flow</button>
+        <button class="btn danger hidden" id="stopFlowBtn">■ Stop</button>
+      </div>
+      <label class="check"><input type="checkbox" id="onlyMissing" checked /> Hanya scene yang belum punya gambar</label>
+      <div class="progress hidden" id="flowProgress"><div></div></div>
+      <p class="hint" id="flowInfo"></p>
+
+      <div class="thumbs" id="thumbGrid"></div>
+      <p class="hint">Tip: tarik beberapa gambar sekaligus ke grid di atas untuk mengisi scene kosong secara berurutan.</p>
+
+      <div class="footer-nav">
+        <button class="btn" data-prev>← Kembali</button>
+        <button class="btn primary" data-next>Lanjut Render →</button>
+      </div>
+    </section>
+
+    <!-- ============ STEP 5: RENDER ============ -->
+    <section class="step" data-step="5">
+      <div class="grid2">
+        <div>
+          <label>Resolusi</label>
+          <div class="seg" id="resSeg">
+            <button data-v="1080">1080p</button>
+            <button data-v="720">720p</button>
+          </div>
+        </div>
+        <div>
+          <label>FPS</label>
+          <div class="seg" id="fpsSeg">
+            <button data-v="24">24</button>
+            <button data-v="30">30</button>
+          </div>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="subtitles" /> Tampilkan subtitle di video</label>
+
+      <div class="summary" id="renderSummary"></div>
+      <button class="btn" id="resyncBtn" title="Hitung ulang kapan tiap gambar & subtitle muncul, dicocokkan dengan suara">🔁 Sinkronkan ulang gambar &amp; subtitle dengan audio</button>
+
+      <div class="row">
+        <button class="btn primary big" id="renderBtn">🎬 Render MP4</button>
+        <button class="btn danger hidden" id="cancelRenderBtn">■ Batal</button>
+      </div>
+      <div class="progress hidden" id="renderProgress"><div></div></div>
+      <p class="hint" id="renderInfo"></p>
+      <video id="resultVideo" class="hidden" controls></video>
+
+      <div class="footer-nav">
+        <button class="btn" data-prev>← Kembali</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ PENGATURAN ============ -->
+  <dialog id="settingsDlg">
+    <h2>⚙︎ Pengaturan AI</h2>
+    <p class="hint">Key disimpan lokal di browser ini dan hanya dikirim ke provider yang bersangkutan. <a href="#" id="openOptionsLink">Buka di tab penuh ↗</a></p>
+    <div id="settingsRoot"></div>
+  </dialog>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

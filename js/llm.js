@@ -1,0 +1,529 @@
+// Lapisan AI multi-provider:
+// - Gemini (native) + banyak endpoint OpenAI-compatible (OpenAI, OpenRouter, Groq, DeepSeek, 9Router, Ollama, custom)
+// - Provider dipilih per tugas, dengan cadangan otomatis ke provider lain yang sudah dikonfigurasi
+// - TTS: Gemini, OpenAI-compatible (/audio/speech), ElevenLabs
+// - Transkrip: Gemini (audio inline) atau Whisper-compatible (/audio/transcriptions)
+
+import { decodeFile } from './audio.js';
+
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const ELEVEN_BASE = 'https://api.elevenlabs.io/v1';
+
+export const PRESETS = {
+  openai: {
+    name: 'OpenAI', base: 'https://api.openai.com/v1', model: 'gpt-4o-mini',
+    sttModel: 'whisper-1', ttsModel: 'gpt-4o-mini-tts', keyUrl: 'https://platform.openai.com/api-keys',
+  },
+  openrouter: {
+    name: 'OpenRouter', base: 'https://openrouter.ai/api/v1', model: 'google/gemini-2.5-flash',
+    sttModel: '', ttsModel: '', keyUrl: 'https://openrouter.ai/keys',
+  },
+  groq: {
+    name: 'Groq', base: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile',
+    sttModel: 'whisper-large-v3', ttsModel: '', keyUrl: 'https://console.groq.com/keys',
+  },
+  deepseek: {
+    name: 'DeepSeek', base: 'https://api.deepseek.com/v1', model: 'deepseek-chat',
+    sttModel: '', ttsModel: '', keyUrl: 'https://platform.deepseek.com/api_keys',
+  },
+  ninerouter: {
+    name: '9Router', base: 'https://api.9router.com/v1', model: '',
+    sttModel: '', ttsModel: '', keyUrl: '',
+  },
+  ollama: {
+    name: 'Ollama (lokal)', base: 'http://localhost:11434/v1', model: 'llama3.1',
+    sttModel: '', ttsModel: '', keyUrl: '',
+  },
+  custom: { name: 'Custom', base: '', model: '', sttModel: '', ttsModel: '', keyUrl: '' },
+};
+
+export const TASKS = {
+  title: 'Kembangkan judul',
+  script: 'Tulis naskah',
+  scene: 'Prompt scene',
+  transcribe: 'Transkrip audio',
+};
+
+export const DEFAULT_SETTINGS = {
+  version: 2,
+  gemini: { key: '', model: 'gemini-2.5-flash', ttsModel: 'gemini-2.5-flash-preview-tts' },
+  compat: [], // [{ id, preset, name, base, key, model, sttModel, ttsModel }]
+  eleven: { key: '', model: 'eleven_multilingual_v2' },
+  tasks: { title: 'gemini', script: 'gemini', scene: 'gemini', transcribe: 'gemini' },
+  fallback: true,
+};
+
+export const OPENAI_VOICES = [
+  { id: 'onyx', name: 'Onyx', gender: 'L', desc: 'Dalam, berwibawa' },
+  { id: 'echo', name: 'Echo', gender: 'L', desc: 'Jernih, tenang' },
+  { id: 'ash', name: 'Ash', gender: 'L', desc: 'Hangat, ekspresif' },
+  { id: 'ballad', name: 'Ballad', gender: 'L', desc: 'Lembut, bercerita' },
+  { id: 'verse', name: 'Verse', gender: 'L', desc: 'Dinamis' },
+  { id: 'fable', name: 'Fable', gender: 'L', desc: 'Storyteller' },
+  { id: 'alloy', name: 'Alloy', gender: 'P', desc: 'Netral' },
+  { id: 'nova', name: 'Nova', gender: 'P', desc: 'Cerah, energik' },
+  { id: 'shimmer', name: 'Shimmer', gender: 'P', desc: 'Lembut' },
+  { id: 'coral', name: 'Coral', gender: 'P', desc: 'Ramah' },
+  { id: 'sage', name: 'Sage', gender: 'P', desc: 'Tenang, bijak' },
+];
+
+const uid = () => `c_${Math.random().toString(36).slice(2, 9)}`;
+
+export function newCompat(preset = 'openai') {
+  const p = PRESETS[preset] || PRESETS.custom;
+  return { id: uid(), preset, name: p.name, base: p.base, key: '', model: p.model, sttModel: p.sttModel, ttsModel: p.ttsModel };
+}
+
+// Pengaturan versi 1 (satu provider) → versi 2.
+function migrate(old) {
+  if (!old) return structuredClone(DEFAULT_SETTINGS);
+  if (old.version === 2) {
+    const d = structuredClone(DEFAULT_SETTINGS);
+    return {
+      ...d, ...old,
+      gemini: { ...d.gemini, ...old.gemini },
+      eleven: { ...d.eleven, ...old.eleven },
+      tasks: { ...d.tasks, ...old.tasks },
+      compat: old.compat || [],
+    };
+  }
+  const s = structuredClone(DEFAULT_SETTINGS);
+  s.gemini = { key: old.geminiKey || '', model: old.geminiModel || s.gemini.model, ttsModel: old.ttsModel || s.gemini.ttsModel };
+  if (old.openaiKey) {
+    const isOpenAI = /api\.openai\.com/.test(old.openaiBase || '');
+    const c = newCompat(isOpenAI ? 'openai' : 'custom');
+    Object.assign(c, { base: old.openaiBase || c.base, key: old.openaiKey, model: old.openaiModel || c.model });
+    s.compat.push(c);
+    if (old.provider === 'openai') s.tasks = { title: c.id, script: c.id, scene: c.id, transcribe: isOpenAI ? c.id : 'gemini' };
+  }
+  return s;
+}
+
+export async function loadSettings() {
+  const { settings } = await chrome.storage.local.get('settings');
+  return migrate(settings);
+}
+
+export async function saveSettings(s) {
+  await chrome.storage.local.set({ settings: s });
+}
+
+const isLocal = (base) => /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(base || '');
+
+export function providers(s) {
+  return [
+    { id: 'gemini', type: 'gemini', name: 'Gemini', ready: !!s.gemini.key, model: s.gemini.model },
+    ...s.compat.map((c) => ({
+      id: c.id, type: 'compat', name: c.name || PRESETS[c.preset]?.name || 'Custom',
+      ready: !!c.base && (!!c.key || isLocal(c.base)), model: c.model, cfg: c,
+    })),
+  ];
+}
+
+const CAPABLE = {
+  title: (p) => p.ready && !!p.model,
+  script: (p) => p.ready && !!p.model,
+  scene: (p) => p.ready && !!p.model,
+  transcribe: (p) => p.ready && (p.type === 'gemini' || !!p.cfg.sttModel),
+};
+
+export function capableProviders(s, task) {
+  return providers(s).filter(CAPABLE[task]);
+}
+
+let notify = () => {};
+export function setNotifier(fn) { notify = fn; }
+
+function order(s, task) {
+  const all = capableProviders(s, task);
+  const primary = all.find((p) => p.id === s.tasks[task]);
+  const rest = all.filter((p) => p !== primary);
+  const list = primary ? [primary, ...(s.fallback ? rest : [])] : s.fallback ? rest : [];
+  if (!list.length) {
+    throw new Error(`Belum ada provider siap untuk "${TASKS[task]}". Isi API key di ⚙︎ Pengaturan.`);
+  }
+  if (!primary) notify(`Provider utama "${TASKS[task]}" belum siap → pakai ${list[0].name}`);
+  return list;
+}
+
+async function withFallback(s, task, fn) {
+  const list = order(s, task);
+  let lastErr;
+  for (let k = 0; k < list.length; k++) {
+    try {
+      return await fn(list[k]);
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[Tuyul] ${list[k].name} gagal (${task})`, e);
+      if (k < list.length - 1) notify(`${list[k].name} gagal: ${e.message.slice(0, 90)} → coba ${list[k + 1].name}`);
+    }
+  }
+  throw lastErr;
+}
+
+async function request(url, opts, label) {
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch {
+    throw new Error(`Tidak bisa terhubung ke ${label} (cek Base URL / koneksi / izin akses).`);
+  }
+  if (res.ok) return res;
+  const j = await res.json().catch(() => ({}));
+  const msg = j.error?.message || j.detail?.message || (typeof j.detail === 'string' ? j.detail : '') || j.message;
+  const err = new Error(`${label}: ${msg || `HTTP ${res.status}`}`);
+  err.status = res.status;
+  throw err;
+}
+
+// ---------------------------------------------------------------- teks
+
+async function geminiGenerate(s, body, model = s.gemini.model) {
+  if (!s.gemini.key) throw new Error('Gemini API key belum diisi.');
+  const res = await request(`${GEMINI_BASE}/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.gemini.key },
+    body: JSON.stringify(body),
+  }, 'Gemini');
+  return res.json();
+}
+
+async function geminiText(s, prompt, json) {
+  const j = await geminiGenerate(s, {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: json ? { responseMimeType: 'application/json' } : {},
+  });
+  const text = j.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+  if (!text) throw new Error('Respons Gemini kosong (mungkin diblokir safety filter).');
+  return text;
+}
+
+function compatHeaders(c, json = true) {
+  return {
+    ...(json ? { 'Content-Type': 'application/json' } : {}),
+    ...(c.key ? { Authorization: `Bearer ${c.key}` } : {}),
+    ...(c.preset === 'openrouter' ? { 'X-Title': 'Tuyul Content' } : {}),
+  };
+}
+
+async function compatChat(c, prompt, json) {
+  const base = c.base.replace(/\/+$/, '');
+  const send = (withFormat) => request(`${base}/chat/completions`, {
+    method: 'POST',
+    headers: compatHeaders(c),
+    body: JSON.stringify({
+      model: c.model,
+      messages: [{ role: 'user', content: prompt }],
+      ...(withFormat ? { response_format: { type: 'json_object' } } : {}),
+    }),
+  }, c.name);
+  let res;
+  try {
+    res = await send(json);
+  } catch (e) {
+    // tidak semua endpoint mendukung response_format → ulangi tanpa itu
+    if (json && e.status === 400) res = await send(false);
+    else throw e;
+  }
+  const j = await res.json();
+  const text = j.choices?.[0]?.message?.content || '';
+  if (!text) throw new Error(`Respons ${c.name} kosong.`);
+  return text;
+}
+
+function rawText(s, p, prompt, json) {
+  return p.type === 'gemini' ? geminiText(s, prompt, json) : compatChat(p.cfg, prompt, json);
+}
+
+export function parseJSON(text) {
+  const cleaned = text.replace(/```(?:json)?/gi, '').trim();
+  try { return JSON.parse(cleaned); } catch {}
+  const m = cleaned.match(/[\[{][\s\S]*[\]}]/);
+  if (m) return JSON.parse(m[0]);
+  throw new Error('Gagal membaca JSON dari AI.');
+}
+
+export function generateText(s, task, prompt) {
+  return withFallback(s, task, (p) => rawText(s, p, prompt, false));
+}
+
+// JSON yang rusak juga dianggap gagal → lanjut ke provider cadangan.
+export function generateJSON(s, task, prompt, validate = () => true) {
+  return withFallback(s, task, async (p) => {
+    const out = parseJSON(await rawText(s, p, prompt, true));
+    if (!validate(out)) throw new Error('Format jawaban AI tidak sesuai.');
+    return out;
+  });
+}
+
+// ---------------------------------------------------------------- daftar model
+
+export async function listModels(s, target) {
+  if (target === 'gemini') {
+    if (!s.gemini.key) throw new Error('Isi Gemini API key dulu.');
+    const j = await (await request(`${GEMINI_BASE}/models?pageSize=1000`, { headers: { 'x-goog-api-key': s.gemini.key } }, 'Gemini')).json();
+    return (j.models || [])
+      .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+      .map((m) => m.name.replace(/^models\//, ''))
+      .sort();
+  }
+  if (target === 'eleven') {
+    if (!s.eleven.key) throw new Error('Isi ElevenLabs API key dulu.');
+    const j = await (await request(`${ELEVEN_BASE}/models`, { headers: { 'xi-api-key': s.eleven.key } }, 'ElevenLabs')).json();
+    return j.filter((m) => m.can_do_text_to_speech !== false).map((m) => m.model_id);
+  }
+  const c = s.compat.find((x) => x.id === target);
+  if (!c?.base) throw new Error('Isi Base URL dulu.');
+  const j = await (await request(`${c.base.replace(/\/+$/, '')}/models`, { headers: compatHeaders(c, false) }, c.name)).json();
+  return (j.data || j.models || []).map((m) => m.id || m.name).filter(Boolean).sort();
+}
+
+// ---------------------------------------------------------------- prompt per tugas
+
+export async function expandTitle(s, raw, lang) {
+  const out = await generateJSON(s, 'title', `Kamu adalah ahli judul YouTube untuk channel faceless edukasi/dokumenter.
+Kembangkan judul/ide mentah berikut menjadi 5 judul video yang lebih menarik, rapi, memancing rasa penasaran, tetap jujur (tidak menyesatkan), dan SEO-friendly.
+Bahasa judul: ${lang === 'en' ? 'English' : 'Bahasa Indonesia'}. Maksimal 90 karakter per judul.
+
+Ide mentah: """${raw}"""
+
+Balas HANYA JSON: {"titles": ["...", "..."]}`, (o) => Array.isArray(o) || Array.isArray(o.titles));
+  const titles = Array.isArray(out) ? out : out.titles;
+  return titles.filter((t) => typeof t === 'string' && t.trim()).slice(0, 5);
+}
+
+export async function writeScript(s, { title, format, style, minutes, lang, wpm }) {
+  const words = Math.round(minutes * wpm);
+  return (await generateText(s, 'script', `Tulis naskah voiceover untuk video YouTube faceless.
+
+Judul: "${title}"
+Format konten: ${format.label} — ${format.hint}
+Gaya narasi: ${style.script}
+Target durasi: ±${minutes} menit (≈${words} kata, toleransi ±10%)
+Bahasa: ${lang === 'en' ? 'English' : 'Bahasa Indonesia yang natural (bukan terjemahan kaku)'}
+
+Aturan:
+- Buka dengan hook kuat di 2 kalimat pertama (pertanyaan atau fakta mengejutkan).
+- Hanya teks yang dibacakan narator. TANPA judul bagian, label adegan, instruksi visual, tanda kurung, emoji, markdown, atau nomor.
+- Paragraf pendek (2–4 kalimat), dipisah baris kosong. Kalimat tidak terlalu panjang supaya enak dibacakan TTS.
+- Fakta harus akurat; jika ada yang belum pasti, sebutkan sebagai dugaan/teori.
+- Tutup dengan kesimpulan singkat dan ajakan halus untuk subscribe/komentar.`)).trim()
+    .replace(/^\s*[#*].*$/gm, '').replace(/\*\*/g, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+export async function scenePrompts(s, { title, visualStyle, ratio, scenes, characterNote }) {
+  const list = scenes.map((x) => `${x.i}. ${x.text}`).join('\n');
+  const out = await generateJSON(s, 'scene', `Kamu adalah art director untuk video faceless "${title}".
+Buat prompt gambar (Bahasa Inggris) untuk setiap scene narasi di bawah. Gambar akan dibuat dengan Google Flow (Imagen), rasio ${ratio}.
+
+Gaya visual WAJIB (sama di semua scene): ${visualStyle.prompt}
+${characterNote ? `Konsistensi karakter/tempat: ${characterNote}` : ''}
+
+Aturan prompt:
+- 1–3 kalimat, deskripsikan subjek, aksi, latar, komposisi kamera, dan suasana yang MENGGAMBARKAN isi narasi.
+- Selalu awali dengan deskripsi gaya visual di atas agar konsisten.
+- Tanpa teks/tulisan/huruf/watermark di gambar. Hindari tokoh nyata yang dikenali, kekerasan grafis, dan konten sensitif.
+
+Scene:
+${list}
+
+Balas HANYA JSON: {"scenes":[{"i":<nomor>,"prompt":"..."}]}`, (o) => Array.isArray(o) || Array.isArray(o.scenes));
+  return Array.isArray(out) ? out : out.scenes;
+}
+
+export async function characterBible(s, { title, script, visualStyle }) {
+  try {
+    const out = await generateJSON(s, 'scene', `Dari naskah video "${title}" berikut, tulis catatan singkat (maks 60 kata, Bahasa Inggris) tentang tokoh utama, tempat, dan era yang akan muncul berulang, supaya gambar antar scene konsisten. Gaya visual: ${visualStyle.label}.
+Naskah:
+${script.slice(0, 6000)}
+
+Balas JSON: {"note":"..."}`);
+    return out.note || '';
+  } catch {
+    return '';
+  }
+}
+
+// ---------------------------------------------------------------- TTS
+
+export function ttsEngines(s) {
+  return [
+    { id: 'gemini', kind: 'gemini', name: 'Gemini', ready: !!s.gemini.key },
+    ...s.compat.filter((c) => c.ttsModel).map((c) => ({
+      id: c.id, kind: 'openai', name: c.name, ready: !!c.base && (!!c.key || isLocal(c.base)),
+    })),
+    { id: 'eleven', kind: 'eleven', name: 'ElevenLabs', ready: !!s.eleven.key },
+  ];
+}
+
+export async function elevenVoices(s) {
+  if (!s.eleven.key) throw new Error('Isi ElevenLabs API key di ⚙︎ Pengaturan.');
+  const j = await (await request(`${ELEVEN_BASE}/voices`, { headers: { 'xi-api-key': s.eleven.key } }, 'ElevenLabs')).json();
+  return (j.voices || []).map((v) => ({
+    id: v.voice_id,
+    name: v.name,
+    gender: v.labels?.gender === 'female' ? 'P' : v.labels?.gender === 'male' ? 'L' : '',
+    desc: [v.labels?.description, v.labels?.accent, v.labels?.use_case].filter(Boolean).join(', '),
+  }));
+}
+
+function chunkText(text, max) {
+  const paras = text.split(/\n\s*\n/);
+  const chunks = [];
+  let cur = '';
+  for (const p of paras) {
+    if ((cur + '\n\n' + p).length > max && cur) { chunks.push(cur); cur = p; }
+    else cur = cur ? `${cur}\n\n${p}` : p;
+  }
+  if (cur) chunks.push(cur);
+  // paragraf tunggal yang terlalu panjang dipotong per kalimat
+  return chunks.flatMap((c) => {
+    if (c.length <= max) return [c];
+    const out = [];
+    let buf = '';
+    for (const sent of c.split(/(?<=[.!?…])\s+/)) {
+      if ((buf + ' ' + sent).length > max && buf) { out.push(buf); buf = sent; }
+      else buf = buf ? `${buf} ${sent}` : sent;
+    }
+    if (buf) out.push(buf);
+    return out;
+  });
+}
+
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function ttsGeminiChunk(s, text, styleInstruction, voice) {
+  const j = await geminiGenerate(s, {
+    contents: [{ role: 'user', parts: [{ text: `${styleInstruction}\n\n${text}` }] }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+    },
+  }, s.gemini.ttsModel);
+  const data = j.candidates?.[0]?.content?.parts?.find((p) => p.inlineData)?.inlineData?.data;
+  if (!data) throw new Error('Gemini TTS tidak mengembalikan audio.');
+  const bytes = base64ToBytes(data);
+  const view = new DataView(bytes.buffer);
+  const f = new Float32Array(bytes.length / 2);
+  for (let k = 0; k < f.length; k++) f[k] = view.getInt16(k * 2, true) / 32768;
+  return { samples: f, sampleRate: 24000 };
+}
+
+async function ttsOpenAIChunk(c, text, styleInstruction, voice) {
+  const res = await request(`${c.base.replace(/\/+$/, '')}/audio/speech`, {
+    method: 'POST',
+    headers: compatHeaders(c),
+    body: JSON.stringify({
+      model: c.ttsModel,
+      voice,
+      input: text,
+      response_format: 'wav',
+      // hanya model gpt-4o-*-tts yang mengerti instruksi gaya
+      ...(/gpt-4o/.test(c.ttsModel) && styleInstruction ? { instructions: styleInstruction } : {}),
+    }),
+  }, `${c.name} TTS`);
+  return decodeFile(await res.blob());
+}
+
+async function ttsElevenChunk(s, text, voice, prev, next) {
+  const res = await request(`${ELEVEN_BASE}/text-to-speech/${encodeURIComponent(voice)}?output_format=mp3_44100_128`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'xi-api-key': s.eleven.key },
+    body: JSON.stringify({
+      text,
+      model_id: s.eleven.model,
+      // konteks kalimat sebelum/sesudah supaya intonasi antar potongan nyambung
+      ...(prev ? { previous_text: prev.slice(-500) } : {}),
+      ...(next ? { next_text: next.slice(0, 500) } : {}),
+    }),
+  }, 'ElevenLabs');
+  return decodeFile(await res.blob());
+}
+
+/** Mengembalikan { samples: Float32Array mono, sampleRate }. */
+export async function synthesize(s, { engine, text, styleInstruction, voice, onProgress }) {
+  const eng = ttsEngines(s).find((e) => e.id === engine);
+  if (!eng) throw new Error('Mesin suara tidak ditemukan. Cek ⚙︎ Pengaturan.');
+  if (!eng.ready) throw new Error(`${eng.name} belum dikonfigurasi (⚙︎ Pengaturan).`);
+  if (!voice) throw new Error('Pilih suara narator dulu.');
+
+  const max = eng.kind === 'openai' ? 3500 : 2500;
+  const parts = chunkText(text, max);
+  const out = [];
+  for (let i = 0; i < parts.length; i++) {
+    onProgress?.(i, parts.length);
+    if (eng.kind === 'gemini') out.push(await ttsGeminiChunk(s, parts[i], styleInstruction, voice));
+    else if (eng.kind === 'openai') out.push(await ttsOpenAIChunk(s.compat.find((c) => c.id === engine), parts[i], styleInstruction, voice));
+    else out.push(await ttsElevenChunk(s, parts[i], voice, parts[i - 1], parts[i + 1]));
+  }
+  onProgress?.(parts.length, parts.length);
+  const sampleRate = out[0].sampleRate;
+  const total = out.reduce((n, a) => n + a.samples.length, 0);
+  const samples = new Float32Array(total);
+  let off = 0;
+  for (const a of out) { samples.set(a.samples, off); off += a.samples.length; }
+  return { samples, sampleRate };
+}
+
+// ---------------------------------------------------------------- transkrip
+
+async function transcribeGemini(s, chunks, lang) {
+  const segments = [];
+  for (const { base64, offset, duration } of chunks) {
+    const j = await geminiGenerate(s, {
+      contents: [{
+        role: 'user',
+        parts: [
+          { inlineData: { mimeType: 'audio/wav', data: base64 } },
+          { text: `Transkripsikan audio narasi ini (${lang === 'en' ? 'English' : 'Bahasa Indonesia'}) per kalimat dengan timestamp dalam DETIK (angka desimal, relatif dari awal audio ini, durasi audio ${duration.toFixed(1)} detik).
+Balas HANYA JSON: {"segments":[{"start":0.0,"end":2.4,"text":"..."}]}` },
+        ],
+      }],
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+    const out = parseJSON(j.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '');
+    for (const seg of Array.isArray(out) ? out : out.segments || []) {
+      const start = Math.max(0, Math.min(duration, Number(seg.start) || 0)) + offset;
+      const end = Math.max(0, Math.min(duration, Number(seg.end) || 0)) + offset;
+      if (seg.text && end > start) segments.push({ start, end, text: String(seg.text).trim() });
+    }
+  }
+  return segments;
+}
+
+async function transcribeWhisper(c, chunks, lang) {
+  const segments = [];
+  for (const { blob, offset } of chunks) {
+    const fd = new FormData();
+    fd.append('file', blob, 'audio.wav');
+    fd.append('model', c.sttModel);
+    fd.append('response_format', 'verbose_json');
+    fd.append('timestamp_granularities[]', 'segment');
+    fd.append('language', lang === 'en' ? 'en' : 'id');
+    const res = await request(`${c.base.replace(/\/+$/, '')}/audio/transcriptions`, {
+      method: 'POST', headers: compatHeaders(c, false), body: fd,
+    }, `${c.name} transkrip`);
+    const j = await res.json();
+    if (!Array.isArray(j.segments)) throw new Error(`Model ${c.sttModel} tidak memberi timestamp (butuh model Whisper).`);
+    for (const seg of j.segments) {
+      const text = String(seg.text || '').trim();
+      if (text && seg.end > seg.start) segments.push({ start: seg.start + offset, end: seg.end + offset, text });
+    }
+  }
+  return segments;
+}
+
+/** chunks: [{ blob, base64, offset, duration }] dari audio.wavChunksForTranscription */
+export async function transcribe(s, { chunks, lang }) {
+  const segs = await withFallback(s, 'transcribe', async (p) => {
+    const out = p.type === 'gemini' ? await transcribeGemini(s, chunks, lang) : await transcribeWhisper(p.cfg, chunks, lang);
+    if (!out.length) throw new Error('Transkrip kosong.');
+    return out;
+  });
+  return segs.sort((a, b) => a.start - b.start);
+}
