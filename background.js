@@ -21,3 +21,51 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     // server MCP tidak jalan — normal kalau pengguna tidak memakai AI agent
   }
 });
+
+// Klik "asli" untuk Google Flow. Flow mengabaikan klik/Enter buatan script (event.isTrusted = false),
+// jadi tombol kirim diklik lewat Chrome DevTools Protocol. Selama dipakai, Chrome menampilkan bilah
+// "Klipin sedang men-debug browser ini"; debugger dilepas lagi setelah 2 menit tidak dipakai.
+const attached = new Set();
+const detachTimers = new Map();
+
+async function ensureAttached(tabId) {
+  if (attached.has(tabId)) return;
+  try {
+    await chrome.debugger.attach({ tabId }, '1.3');
+  } catch (e) {
+    if (!/already attached/i.test(e.message)) throw e; // service worker sempat tidur, sesi lama masih ada
+  }
+  attached.add(tabId);
+}
+
+function scheduleDetach(tabId) {
+  clearTimeout(detachTimers.get(tabId));
+  detachTimers.set(tabId, setTimeout(() => {
+    attached.delete(tabId);
+    chrome.debugger.detach({ tabId }).catch(() => {});
+  }, 120000));
+}
+
+chrome.debugger.onDetach.addListener(({ tabId }) => attached.delete(tabId));
+
+async function trustedClick(tabId, x, y, attempt = 1) {
+  await ensureAttached(tabId);
+  // Saat zoom halaman ≠ 100%, skala koordinat CDP bisa berbeda dari piksel CSS → percobaan
+  // berikutnya memakai skala yang lain (sama saja kalau zoom 100%).
+  const zoom = await chrome.tabs.getZoom(tabId).catch(() => 1);
+  const k = attempt % 2 ? 1 : zoom;
+  const base = { x: x * k, y: y * k, button: 'left', clickCount: 1 };
+  const send = (p) => chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', p);
+  await send({ ...base, type: 'mouseMoved', button: 'none' });
+  await send({ ...base, type: 'mousePressed' });
+  await send({ ...base, type: 'mouseReleased' });
+  scheduleDetach(tabId);
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type !== 'TUYUL_TRUSTED_CLICK' || !sender.tab?.id) return false;
+  trustedClick(sender.tab.id, msg.x, msg.y, msg.attempt)
+    .then(() => sendResponse({ ok: true }))
+    .catch((e) => sendResponse({ ok: false, error: e.message }));
+  return true;
+});

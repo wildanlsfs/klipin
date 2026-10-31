@@ -85,6 +85,20 @@
     }
   }
 
+  // Flow hanya menanggapi klik asli dari pengguna (event.isTrusted), jadi minta background mengklik
+  // lewat debugger Chrome. Kalau tidak bisa (izin/versi lama), pakai klik biasa.
+  async function clickReal(btn, attempt) {
+    btn.scrollIntoView({ block: 'nearest' });
+    const r = btn.getBoundingClientRect();
+    const res = await chrome.runtime.sendMessage({
+      type: 'TUYUL_TRUSTED_CLICK', x: r.left + r.width / 2, y: r.top + r.height / 2, attempt,
+    }).catch((e) => ({ ok: false, error: e.message }));
+    if (!res?.ok) {
+      console.warn('[Klipin] klik asli gagal, pakai klik biasa:', res?.error);
+      btn.click();
+    }
+  }
+
   // Kirim prompt dan pastikan benar-benar terkirim (kolom prompt kosong/berubah).
   // Kalau Flow masih sibuk menyelesaikan respons sebelumnya, klik bisa diabaikan → ulangi.
   async function submitPrompt(prompt, label) {
@@ -97,7 +111,7 @@
         await sleep(500);
       }
       const btn = findSubmit(input);
-      if (btn && !isDisabled(btn)) btn.click();
+      if (btn && !isDisabled(btn)) await clickReal(btn, attempt);
       else if (attempt % 2 === 0) pressEnter(input); // cadangan: Enter di kolom prompt
       else { status(`${label}: menunggu Flow siap…`); await sleep(1500); continue; }
 
