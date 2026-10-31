@@ -511,6 +511,14 @@ export async function synthesize(s, { engine, text, styleInstruction, voice, onP
 
 // ---------------------------------------------------------------- transkrip
 
+// Gemini kadang menulis waktu sebagai "1:05.2" / "00:01:05" alih-alih detik.
+const toSec = (v) => {
+  if (typeof v === 'number') return v;
+  const parts = String(v ?? '').trim().replace(',', '.').split(':').map(Number);
+  if (!parts.length || parts.some((x) => !Number.isFinite(x))) return NaN;
+  return parts.reduce((acc, x) => acc * 60 + x, 0);
+};
+
 async function transcribeGemini(s, chunks, lang) {
   const segments = [];
   for (const { base64, offset, duration } of chunks) {
@@ -520,6 +528,7 @@ async function transcribeGemini(s, chunks, lang) {
         parts: [
           { inlineData: { mimeType: 'audio/wav', data: base64 } },
           { text: `Transkripsikan audio narasi ini (${lang === 'en' ? 'English' : 'Bahasa Indonesia'}) per kalimat dengan timestamp dalam DETIK (angka desimal, relatif dari awal audio ini, durasi audio ${duration.toFixed(1)} detik).
+Tulis waktu sebagai angka detik (contoh 65.2, BUKAN "1:05"). Jangan lewatkan kalimat apa pun.
 Balas HANYA JSON: {"segments":[{"start":0.0,"end":2.4,"text":"..."}]}` },
         ],
       }],
@@ -527,9 +536,11 @@ Balas HANYA JSON: {"segments":[{"start":0.0,"end":2.4,"text":"..."}]}` },
     });
     const out = parseJSON(j.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '');
     for (const seg of Array.isArray(out) ? out : out.segments || []) {
-      const start = Math.max(0, Math.min(duration, Number(seg.start) || 0)) + offset;
-      const end = Math.max(0, Math.min(duration, Number(seg.end) || 0)) + offset;
-      if (seg.text && end > start) segments.push({ start, end, text: String(seg.text).trim() });
+      // waktu yang tidak terbaca tetap disimpan teksnya; nanti diselaraskan ke jeda audio
+      const st = toSec(seg.start), en = toSec(seg.end);
+      const start = Math.max(0, Math.min(duration, Number.isFinite(st) ? st : 0)) + offset;
+      const end = Math.max(start, Math.min(duration, Number.isFinite(en) ? en : 0) + offset);
+      if (seg.text) segments.push({ start, end, text: String(seg.text).trim() });
     }
   }
   return segments;
@@ -564,5 +575,5 @@ export async function transcribe(s, { chunks, lang }) {
     if (!out.length) throw new Error('Transkrip kosong.');
     return out;
   });
-  return segs.sort((a, b) => a.start - b.start);
+  return segs; // urutan teks dipertahankan; timestamp yang kacau ditangani alignTranscript
 }

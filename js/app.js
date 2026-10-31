@@ -4,7 +4,7 @@ import {
 } from './data.js';
 import * as llm from './llm.js';
 import * as audioLib from './audio.js';
-import { scenesFromScript, scenesFromTranscript, retimeScenes, snapToPauses, fmtTime } from './scenes.js';
+import { scenesFromScript, scenesFromTranscript, retimeScenes, fmtTime } from './scenes.js';
 import { renderMp4, outputSize } from './render.js';
 import { kvGet, kvSet, kvDel } from './store.js';
 import { h, toast, errMsg, fillSelect } from './dom.js';
@@ -517,7 +517,7 @@ async function scenesFromTranscriptNow(btn) {
   const a = currentAudio();
   const segs = await llm.transcribe(settings, { chunks: await audioLib.wavChunksForTranscription(a), lang: S.lang });
   if (!segs.length) throw new Error('Transkrip kosong.');
-  S.scenes = snapToPauses(scenesFromTranscript(segs, audioLib.duration(a), S.sceneSec), audioPauses());
+  S.scenes = scenesFromTranscript(segs, audioLib.duration(a), S.sceneSec, audioPauses());
   S.syncV = 2;
   renderScenes();
   await buildPrompts(btn);

@@ -36,15 +36,21 @@ const lowerBound = (arr, t) => {
  * perkiraan dari panjang teks, dioptimalkan sekaligus (DP) sehingga selisih tidak menumpuk.
  * Return: array waktu batas, panjang weights.length + 1 (b[0] = t0, b[n] = t1).
  */
-export function alignUnits(weights, t0, t1, pauses = []) {
+export function alignUnits(weights, t0, t1, pauses = [], prior = null) {
   const n = weights.length;
   const span = t1 - t0;
   const W = weights.reduce((a, b) => a + b, 0) || 1;
-  const exp = weights.map((w) => (span * w) / W);
+  let exp = weights.map((w) => (span * w) / W);
   const cum = [0];
   for (const w of weights) cum.push(cum[cum.length - 1] + w);
-  const prop = cum.map((c) => t0 + (span * c) / W);
+  let prop = cum.map((c) => t0 + (span * c) / W);
   if (n <= 1) return [t0, t1];
+  // Perkiraan batas dari luar (mis. timestamp transkrip AI) dipakai sebagai titik awal pencarian
+  // dan perkiraan durasi tiap potongan; tetap dikunci ke jeda nyata di audio.
+  if (prior?.length === n + 1) {
+    prop = prior.map((t, k) => (k === 0 ? t0 : k === n ? t1 : Math.min(t1, Math.max(t0, t))));
+    exp = exp.map((e, i) => Math.max(0.2, (prop[i + 1] - prop[i] + e) / 2));
+  }
 
   const inRange = pauses.filter((p) => p.t > t0 + 0.05 && p.t < t1 - 0.05);
   const win = Math.max(4, span * 0.12);
@@ -164,25 +170,27 @@ export function scenesFromScript(script, totalSec, targetSec, pauses = []) {
   return retimeScenes(scenes, totalSec, pauses);
 }
 
-// Geser batas scene (hasil transkrip) ke jeda terdekat supaya pergantian gambar tidak memotong kata.
-export function snapToPauses(scenes, pauses, maxShift = 0.8) {
-  for (let i = 1; i < scenes.length; i++) {
-    const t = scenes[i].start;
-    let best = null;
-    for (let j = lowerBound(pauses, t - maxShift); j < pauses.length && pauses[j].t <= t + maxShift; j++) {
-      if (!best || Math.abs(pauses[j].t - t) < Math.abs(best.t - t)) best = pauses[j];
-    }
-    if (best && best.t > scenes[i - 1].start + 0.3 && best.t < scenes[i].end - 0.3) {
-      scenes[i].start = best.t;
-      scenes[i - 1].end = best.t;
-    }
-  }
-  return scenes;
+/**
+ * Timestamp transkrip AI bisa meleset (Gemini sering bergeser beberapa detik, makin jauh makin besar),
+ * jadi dipakai sebagai perkiraan saja. Kalau timestampnya tidak masuk akal (tidak urut, tidak menutup
+ * audio), waktunya dihitung dari panjang teks. Batas kalimat lalu dikunci ke jeda nyata di audio.
+ */
+export function alignTranscript(segments, totalSec, pauses = []) {
+  const segs = segments.filter((s) => s.text);
+  if (!segs.length) return [];
+  const starts = segs.map((s) => s.start);
+  const ordered = starts.every((t, k) => k === 0 || t >= starts[k - 1]);
+  const last = segs[segs.length - 1].end;
+  const covers = Number.isFinite(last) && last > totalSec * 0.8 && last < totalSec * 1.2;
+  const prior = ordered && covers ? [0, ...starts.slice(1), totalSec] : null;
+  const b = alignUnits(segs.map((s) => spokenWeight(s.text)), 0, totalSec, pauses, prior);
+  return segs.map((s, k) => ({ text: s.text, start: b[k], end: b[k + 1] }));
 }
 
-// Scene dari transkrip bertimestamp (hasil AI).
-export function scenesFromTranscript(segments, totalSec, targetSec) {
-  const groups = groupByLength(segments, targetSec, (s) => s.end - s.start);
+// Scene dari transkrip bertimestamp (hasil AI). Waktunya diselaraskan ulang ke jeda di audio.
+export function scenesFromTranscript(segments, totalSec, targetSec, pauses = []) {
+  const segs = alignTranscript(segments, totalSec, pauses);
+  const groups = groupByLength(segs, targetSec, (s) => s.end - s.start);
   return groups.map((g, idx) => ({
     i: idx + 1,
     text: g.map((s) => s.text).join(' '),
