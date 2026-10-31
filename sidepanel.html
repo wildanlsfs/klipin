@@ -27,6 +27,7 @@
     <button data-step="3"><b>3</b>Scene</button>
     <button data-step="4"><b>4</b>Gambar</button>
     <button data-step="5"><b>5</b>Render</button>
+    <button data-step="6"><b>6</b>YouTube</button>
   </nav>
 
   <main>
@@ -180,7 +181,7 @@
         </div>
         <ol class="hint tight">
           <li>Buka Flow, masuk ke sebuah project.</li>
-          <li>Ubah mode ke <b>gambar</b> (Image), atur output per prompt = 1, rasio sama dengan pilihanmu.</li>
+          <li>Ubah mode ke <b>gambar</b> (Image), rasio sama dengan pilihanmu. Output per prompt = 1 lebih hemat kredit; kalau Flow membuat 2+, semuanya disimpan dan bisa dipilih lewat tombol <b>⇄</b> di gambar.</li>
           <li>Klik <b>Kirim Semua ke Flow</b>, lalu biarkan berjalan sendiri.</li>
         </ol>
         <div class="row">
@@ -236,6 +237,82 @@
       <div class="progress hidden" id="renderProgress"><div></div></div>
       <p class="hint" id="renderInfo"></p>
       <video id="resultVideo" class="hidden" controls></video>
+
+      <div class="footer-nav">
+        <button class="btn" data-prev>← Kembali</button>
+        <button class="btn primary" data-next>Lanjut ke YouTube →</button>
+      </div>
+    </section>
+
+    <!-- ============ STEP 6: PAKET YOUTUBE ============ -->
+    <section class="step" data-step="6">
+      <h2>📺 Paket upload YouTube</h2>
+      <p class="hint">Judul, deskripsi (bab/timestamp otomatis dari scene), tag, dan thumbnail 1280×720 untuk proyek ini.</p>
+      <button class="btn primary" id="ytGenBtn">✨ Buat Judul, Deskripsi &amp; Thumbnail</button>
+
+      <div id="ytOut" class="hidden">
+        <div class="label-row">
+          <label>Judul</label>
+          <button class="link" id="ytCopyTitle">Salin</button>
+        </div>
+        <div class="options" id="ytTitles"></div>
+
+        <div class="label-row">
+          <label for="ytDesc">Deskripsi</label>
+          <span class="meta" id="ytDescMeta"></span>
+          <button class="link" id="ytCopyDesc">Salin</button>
+        </div>
+        <textarea id="ytDesc" rows="14"></textarea>
+
+        <div class="label-row">
+          <label for="ytTags">Tag (pisahkan dengan koma)</label>
+          <span class="meta" id="ytTagsMeta"></span>
+          <button class="link" id="ytCopyTags">Salin</button>
+        </div>
+        <textarea id="ytTags" rows="3"></textarea>
+
+        <div class="card">
+          <div class="label-row">
+            <h3>🖼️ Thumbnail</h3>
+            <span class="meta">1280×720</span>
+          </div>
+          <canvas id="thumbCanvas" width="1280" height="720"></canvas>
+
+          <label for="thumbText">Teks thumbnail</label>
+          <div class="chips" id="ytThumbTexts"></div>
+          <input type="text" id="thumbText" placeholder="2–4 kata, mis. RAHASIA TERKUBUR" />
+          <div class="grid2">
+            <div>
+              <label>Posisi teks</label>
+              <div class="seg" id="thumbPosSeg">
+                <button data-v="left">Kiri</button>
+                <button data-v="right">Kanan</button>
+                <button data-v="bottom">Bawah</button>
+              </div>
+            </div>
+            <div>
+              <label>Warna</label>
+              <div class="seg" id="thumbColorSeg">
+                <button data-v="yellow">Kuning</button>
+                <button data-v="white">Putih</button>
+                <button data-v="red">Merah</button>
+              </div>
+            </div>
+          </div>
+
+          <label>Latar (klik untuk pilih)</label>
+          <div class="bgstrip" id="thumbBgs"></div>
+          <div class="row">
+            <button class="btn" id="thumbFlowBtn" title="Set rasio Flow ke 16:9 dulu">🌊 Buat latar khusus di Flow</button>
+            <button class="btn" id="thumbUploadBtn">⬆ Upload latar</button>
+          </div>
+          <details>
+            <summary class="hint">Prompt latar thumbnail (untuk Flow)</summary>
+            <textarea id="thumbPrompt" rows="4"></textarea>
+          </details>
+          <button class="btn primary" id="thumbDlBtn">⬇ Download Thumbnail (JPG)</button>
+        </div>
+      </div>
 
       <div class="footer-nav">
         <button class="btn" data-prev>← Kembali</button>

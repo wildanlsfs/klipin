@@ -42,6 +42,7 @@ export const TASKS = {
   script: 'Tulis naskah',
   scene: 'Prompt scene',
   transcribe: 'Transkrip audio',
+  youtube: 'Paket YouTube',
 };
 
 export const DEFAULT_SETTINGS = {
@@ -49,7 +50,7 @@ export const DEFAULT_SETTINGS = {
   gemini: { key: '', model: 'gemini-2.5-flash', ttsModel: 'gemini-2.5-flash-preview-tts' },
   compat: [], // [{ id, preset, name, base, key, model, sttModel, ttsModel }]
   eleven: { key: '', model: 'eleven_multilingual_v2' },
-  tasks: { title: 'gemini', script: 'gemini', scene: 'gemini', transcribe: 'gemini' },
+  tasks: { title: 'gemini', script: 'gemini', scene: 'gemini', transcribe: 'gemini', youtube: 'gemini' },
   fallback: true,
 };
 
@@ -83,7 +84,7 @@ function migrate(old) {
       ...d, ...old,
       gemini: { ...d.gemini, ...old.gemini },
       eleven: { ...d.eleven, ...old.eleven },
-      tasks: { ...d.tasks, ...old.tasks },
+      tasks: { ...d.tasks, youtube: old.tasks?.script || 'gemini', ...old.tasks }, // tugas baru ikut provider naskah
       compat: old.compat || [],
     };
   }
@@ -94,7 +95,7 @@ function migrate(old) {
     const c = newCompat(isOpenAI ? 'openai' : 'custom');
     Object.assign(c, { base: old.openaiBase || c.base, key: old.openaiKey, model: old.openaiModel || c.model });
     s.compat.push(c);
-    if (old.provider === 'openai') s.tasks = { title: c.id, script: c.id, scene: c.id, transcribe: isOpenAI ? c.id : 'gemini' };
+    if (old.provider === 'openai') s.tasks = { title: c.id, script: c.id, scene: c.id, youtube: c.id, transcribe: isOpenAI ? c.id : 'gemini' };
   }
   return s;
 }
@@ -124,6 +125,7 @@ const CAPABLE = {
   title: (p) => p.ready && !!p.model,
   script: (p) => p.ready && !!p.model,
   scene: (p) => p.ready && !!p.model,
+  youtube: (p) => p.ready && !!p.model,
   transcribe: (p) => p.ready && (p.type === 'gemini' || !!p.cfg.sttModel),
 };
 
@@ -329,6 +331,43 @@ ${list}
 
 Balas HANYA JSON: {"scenes":[{"i":<nomor>,"prompt":"..."}]}`, (o) => Array.isArray(o) || Array.isArray(o.scenes));
   return Array.isArray(out) ? out : out.scenes;
+}
+
+// Paket upload YouTube: judul, deskripsi, tag, teks & prompt thumbnail, bab (chapters).
+export async function youtubePack(s, { title, script, scenes, lang, ratio }) {
+  const en = lang === 'en';
+  const list = scenes.map((x) => `${x.i}. [${x.t}] ${x.text.slice(0, 140)}`).join('\n');
+  const out = await generateJSON(s, 'youtube', `Kamu adalah strategist YouTube untuk channel faceless edukasi/dokumenter yang ahli CTR & SEO.
+Buat paket upload untuk video berikut. Bahasa output: ${en ? 'English' : 'Bahasa Indonesia yang natural'} (kecuali "thumbPrompt": Bahasa Inggris).
+
+Judul kerja: "${title}"
+Naskah (ringkas):
+${script.slice(0, 5000)}
+
+Scene bertimestamp (nomor. [waktu] narasi):
+${list.slice(0, 7000)}
+
+Isi JSON:
+- "titles": 5 judul berbeda sudut (rasa penasaran, angka/fakta, konflik, pertanyaan, manfaat). Maks 70 karakter, kata kunci utama di depan, jujur — tidak clickbait palsu, tidak HURUF BESAR SEMUA.
+- "description": deskripsi siap tempel. 2 baris pertama = hook + kata kunci (tampil sebelum "lainnya"). Lalu 1 paragraf ringkasan isi, lalu ajakan subscribe/komentar dengan pertanyaan spesifik. JANGAN tulis timestamp/bab dan hashtag di sini (ditambahkan otomatis).
+- "chapters": 4–8 bab, scene pertama wajib nomor 1. Format {"scene": <nomor scene awal bab>, "title": "<judul bab 2–5 kata>"}.
+- "tags": 12–20 tag pencarian (gabungan luas & spesifik), tanpa tanda #.
+- "hashtags": 3 hashtag relevan, dengan #.
+- "thumbTexts": 4 teks thumbnail SANGAT pendek (2–4 kata), emosional/penasaran, BUKAN pengulangan judul.
+- "thumbPrompt": prompt gambar thumbnail YouTube rasio 16:9: satu subjek fokus, ekspresi/aksi dramatis, kontras tinggi, warna mencolok, latar sederhana, ruang kosong di sisi kiri untuk teks, tanpa teks/huruf di gambar, tanpa tokoh nyata.${ratio && ratio !== '16:9' ? ' (video aslinya ' + ratio + ', tapi thumbnail tetap 16:9)' : ''}
+
+Balas HANYA JSON: {"titles":[],"description":"","chapters":[],"tags":[],"hashtags":[],"thumbTexts":[],"thumbPrompt":""}`,
+  (o) => Array.isArray(o.titles) && o.titles.length && typeof o.description === 'string');
+  const strs = (a) => (Array.isArray(a) ? a : []).filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim());
+  return {
+    titles: strs(out.titles).slice(0, 6),
+    description: out.description.trim(),
+    chapters: (Array.isArray(out.chapters) ? out.chapters : []).filter((c) => c && Number(c.scene) && c.title),
+    tags: strs(out.tags).map((t) => t.replace(/^#/, '')),
+    hashtags: strs(out.hashtags).map((t) => (t.startsWith('#') ? t : `#${t}`).replace(/\s+/g, '')).slice(0, 5),
+    thumbTexts: strs(out.thumbTexts).slice(0, 6),
+    thumbPrompt: typeof out.thumbPrompt === 'string' ? out.thumbPrompt.trim() : '',
+  };
 }
 
 export async function characterBible(s, { title, script, visualStyle }) {

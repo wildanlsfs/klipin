@@ -34,6 +34,7 @@ const DEFAULT_STATE = {
   res: 1080,
   fps: 30,
   subtitles: true,
+  yt: null,
 };
 
 let S = structuredClone(DEFAULT_STATE);
@@ -102,6 +103,7 @@ function updateStepper() {
     2: !!S.script && !!audioRaw,
     3: S.scenes.length > 0 && S.scenes.every((s) => s.prompt),
     4: S.scenes.length > 0 && S.scenes.every((s) => s.image),
+    6: !!S.yt?.desc,
   };
   $$('#stepper button').forEach((b) => {
     const n = Number(b.dataset.step);
@@ -132,6 +134,7 @@ function renderStep(step) {
   if (step === 3) renderScenes();
   if (step === 4) { renderThumbs(); checkFlow(); }
   if (step === 5) renderSummary();
+  if (step === 6) renderYt();
 }
 
 // ---------------------------------------------------------------- step 1: judul
@@ -598,7 +601,16 @@ function thumbEl(s) {
     h('div', { class: 'acts' },
       h('button', { title: 'Buat ulang di Flow', onclick: () => runFlow([s]) }, '↻'),
       h('button', { title: 'Upload gambar sendiri', onclick: () => pickImageFor(s) }, '⬆'),
-      s.image && h('button', { title: 'Hapus gambar', onclick: () => { s.image = null; s.status = 'idle'; updateThumb(s); save(); } }, '✕')));
+      s.image && s.alts?.length > 0 && h('button', { title: `Ganti ke gambar lain dari Flow (${s.alts.length + 1} pilihan)`, onclick: () => swapAlt(s) }, `⇄ ${s.alts.length + 1}`),
+      s.image && h('button', { title: 'Hapus gambar', onclick: () => { s.image = null; s.alts = []; s.status = 'idle'; updateThumb(s); save(); } }, '✕')));
+}
+
+// putar ke gambar alternatif berikutnya (Flow sering membuat 2 gambar per prompt)
+function swapAlt(s) {
+  s.alts.push(s.image);
+  s.image = s.alts.shift();
+  updateThumb(s);
+  save();
 }
 
 function updateThumb(s) {
@@ -685,7 +697,13 @@ async function runFlow(targets) {
 
       if (res?.ok) {
         try {
-          s.image = await normalizeImage(res.image || res.url);
+          const outs = res.images?.length ? res.images : [res];
+          const imgs = [];
+          for (const o of outs) {
+            try { imgs.push(await normalizeImage(o.image || o.url)); } catch {}
+          }
+          if (!imgs.length) throw new Error('kosong');
+          [s.image, ...s.alts] = imgs; // output lain dari Flow disimpan sebagai pilihan (⇄)
           s.status = 'done';
           ok++;
         } catch (e) {
@@ -799,6 +817,266 @@ $('#renderBtn').addEventListener('click', async () => {
 });
 $('#cancelRenderBtn').addEventListener('click', () => renderAbort?.abort());
 
+// ---------------------------------------------------------------- step 6: paket YouTube
+// S.yt = { titles, title, desc, tags, thumbTexts, thumbPrompt, bgs: [dataURL], thumb: { text, pos, color, bg } }
+// thumb.bg: 'g<n>' = latar buatan Flow/upload (S.yt.bgs[n]), 's<i>' = gambar scene nomor i.
+
+const THUMB_W = 1280, THUMB_H = 720;
+const THUMB_COLORS = { yellow: '#ffd400', white: '#ffffff', red: '#ff2d2d' };
+
+function ensureYt() {
+  S.yt ||= { titles: [], title: '', desc: '', tags: '', thumbTexts: [], thumbPrompt: '', bgs: [], thumb: {} };
+  S.yt.thumb = { text: '', pos: 'left', color: 'yellow', bg: '', ...S.yt.thumb };
+  return S.yt;
+}
+
+// Bab YouTube: mulai 0:00, minimal 3 bab, tiap bab ≥ 10 detik.
+function chaptersText(chapters) {
+  const byI = new Map(S.scenes.map((x) => [x.i, x]));
+  const list = [];
+  for (const c of [...chapters].sort((a, b) => a.scene - b.scene)) {
+    const sc = byI.get(Number(c.scene));
+    if (!sc) continue;
+    const t = list.length ? Math.floor(sc.start) : 0;
+    if (list.length && t - list.at(-1).t < 10) continue;
+    list.push({ t, title: String(c.title).trim() });
+  }
+  return list.length >= 3 ? list.map((c) => `${fmtTime(c.t)} ${c.title}`).join('\n') : '';
+}
+
+function fitTags(tags, max = 480) { // batas YouTube 500 karakter total
+  const out = [];
+  let len = 0;
+  for (const t of tags) {
+    if (len + t.length + 1 > max) break;
+    out.push(t);
+    len += t.length + 1;
+  }
+  return out.join(', ');
+}
+
+$('#ytGenBtn').addEventListener('click', (e) => busy(e.currentTarget, '⏳ Menyusun paket YouTube…', async () => {
+  if (!S.script.trim() && !S.scenes.length) throw new Error('Naskah masih kosong (langkah 2).');
+  const scenes = S.scenes.map((x) => ({ i: x.i, t: fmtTime(x.start), text: x.text }));
+  const out = await llm.youtubePack(settings, {
+    title: S.title || S.rawTitle, script: S.script || S.scenes.map((x) => x.text).join(' '), scenes, lang: S.lang, ratio: S.ratio,
+  });
+  const yt = ensureYt();
+  const chap = chaptersText(out.chapters);
+  yt.titles = out.titles;
+  yt.title = out.titles[0] || S.title;
+  yt.desc = [
+    out.description,
+    chap && `${S.lang === 'en' ? '⏱️ Chapters' : '⏱️ Bab'}\n${chap}`,
+    out.hashtags.join(' '),
+  ].filter(Boolean).join('\n\n');
+  yt.tags = fitTags(out.tags);
+  yt.thumbTexts = out.thumbTexts;
+  yt.thumbPrompt = out.thumbPrompt;
+  if (!yt.thumb.text || !yt.thumbTexts.includes(yt.thumb.text)) yt.thumb.text = out.thumbTexts[0] || '';
+  renderYt();
+  save();
+  toast('Paket YouTube siap ✓', 'ok');
+}));
+
+function renderYt() {
+  const yt = ensureYt();
+  $('#ytOut').classList.toggle('hidden', !yt.titles.length && !yt.desc);
+  const opt = (t) => h('label', { class: 'opt' },
+    h('input', { type: 'radio', name: 'ytTitle', checked: yt.title === t, onchange: () => { yt.title = t; save(); } }),
+    h('span', {}, t),
+    h('span', { class: `len ${t.length > 100 ? 'over' : ''}` }, t.length));
+  $('#ytTitles').replaceChildren(...yt.titles.map(opt));
+  $('#ytDesc').value = yt.desc;
+  $('#ytTags').value = yt.tags;
+  $('#thumbPrompt').value = yt.thumbPrompt;
+  $('#thumbText').value = yt.thumb.text;
+  renderThumbTexts();
+  updateYtMeta();
+  renderThumbBgs();
+  thumbSegs.forEach((f) => f());
+  drawThumb();
+}
+
+function renderThumbTexts() {
+  const yt = ensureYt();
+  $('#ytThumbTexts').replaceChildren(...yt.thumbTexts.map((t) => h('button', {
+    class: `chip ${yt.thumb.text === t ? 'active' : ''}`,
+    onclick: () => { yt.thumb.text = t; $('#thumbText').value = t; renderThumbTexts(); drawThumb(); save(); },
+  }, t)));
+}
+
+function updateYtMeta() {
+  const yt = ensureYt();
+  $('#ytDescMeta').textContent = `${yt.desc.length} / 5000`;
+  $('#ytTagsMeta').textContent = `${yt.tags.length} / 500`;
+}
+
+$('#ytDesc').addEventListener('input', (e) => { ensureYt().desc = e.target.value; updateYtMeta(); save(); });
+$('#ytTags').addEventListener('input', (e) => { ensureYt().tags = e.target.value; updateYtMeta(); save(); });
+$('#thumbPrompt').addEventListener('input', (e) => { ensureYt().thumbPrompt = e.target.value; save(); });
+$('#thumbText').addEventListener('input', (e) => { ensureYt().thumb.text = e.target.value; renderThumbTexts(); drawThumb(); save(); });
+$('#ytCopyTitle').addEventListener('click', () => copy(ensureYt().title, 'Judul'));
+$('#ytCopyDesc').addEventListener('click', () => copy(ensureYt().desc, 'Deskripsi'));
+$('#ytCopyTags').addEventListener('click', () => copy(ensureYt().tags, 'Tag'));
+
+function thumbBgList() {
+  const yt = ensureYt();
+  return [
+    ...yt.bgs.map((src, n) => ({ key: `g${n}`, src, label: 'latar' })),
+    ...S.scenes.filter((x) => x.image).map((x) => ({ key: `s${x.i}`, src: x.image, label: `scene ${x.i}` })),
+  ];
+}
+
+function currentBg() {
+  const list = thumbBgList();
+  return list.find((b) => b.key === ensureYt().thumb.bg) || list[0] || null;
+}
+
+function renderThumbBgs() {
+  const cur = currentBg();
+  $('#thumbBgs').replaceChildren(...thumbBgList().map((b) => h('button', {
+    class: b.key === cur?.key ? 'active' : '', title: b.label,
+    onclick: () => { ensureYt().thumb.bg = b.key; renderThumbBgs(); drawThumb(); save(); },
+  }, h('img', { src: b.src, alt: b.label }), h('span', {}, b.label))));
+}
+
+const imgCache = new Map();
+function loadImg(src) {
+  if (!imgCache.has(src)) {
+    imgCache.set(src, new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = reject;
+      im.src = src;
+    }));
+  }
+  return imgCache.get(src);
+}
+
+// Bungkus teks jadi ≤3 baris dengan ukuran huruf sebesar mungkin yang muat di kotak.
+function layoutThumbText(ctx, text, boxW, boxH) {
+  const words = text.toUpperCase().split(/\s+/).filter(Boolean);
+  for (let size = 190; size >= 48; size -= 6) {
+    ctx.font = `900 ${size}px Impact, "Anton", "Arial Black", "Helvetica Neue", sans-serif`;
+    const lines = [];
+    let line = '';
+    for (const w of words) {
+      const next = line ? `${line} ${w}` : w;
+      if (ctx.measureText(next).width <= boxW || !line) line = next;
+      else { lines.push(line); line = w; }
+    }
+    if (line) lines.push(line);
+    const lh = size * 1.02;
+    if (lines.length <= 3 && lines.every((l) => ctx.measureText(l).width <= boxW) && lines.length * lh <= boxH) {
+      return { size, lines, lh };
+    }
+  }
+  return { size: 48, lines: [text.toUpperCase()], lh: 50 };
+}
+
+let drawSeq = 0;
+async function drawThumb(canvas = $('#thumbCanvas')) {
+  const onScreen = canvas === $('#thumbCanvas');
+  const seq = onScreen ? ++drawSeq : drawSeq;
+  const yt = ensureYt();
+  const { text, pos, color } = yt.thumb;
+  const bg = currentBg();
+  const im = bg ? await loadImg(bg.src).catch(() => null) : null;
+  if (onScreen && seq !== drawSeq) return; // ada gambar yang lebih baru
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, W, H);
+  if (im) { // cover-crop; untuk "kiri", subjek digeser ke kanan agar teks tidak menutupinya
+    const k = Math.max(W / im.width, H / im.height);
+    const dw = im.width * k, dh = im.height * k;
+    const fx = pos === 'left' ? 0.65 : pos === 'right' ? 0.35 : 0.5;
+    ctx.drawImage(im, (W - dw) * fx, (H - dh) * 0.4, dw, dh);
+  }
+  if (!text.trim()) return;
+
+  // gelapkan sisi teks supaya terbaca
+  const g = pos === 'bottom' ? ctx.createLinearGradient(0, H, 0, H * 0.35)
+    : pos === 'left' ? ctx.createLinearGradient(0, 0, W * 0.7, 0) : ctx.createLinearGradient(W, 0, W * 0.3, 0);
+  g.addColorStop(0, 'rgba(0,0,0,.78)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  const pad = 56;
+  const boxW = pos === 'bottom' ? W - pad * 2 : W * 0.56;
+  const boxH = pos === 'bottom' ? H * 0.45 : H - pad * 2;
+  const { size, lines, lh } = layoutThumbText(ctx, text, boxW, boxH);
+  const blockH = lines.length * lh;
+  const y0 = pos === 'bottom' ? H - pad - blockH : (H - blockH) / 2;
+  ctx.textBaseline = 'top';
+  ctx.textAlign = pos === 'right' ? 'right' : pos === 'bottom' ? 'center' : 'left';
+  const x = pos === 'right' ? W - pad : pos === 'bottom' ? W / 2 : pad;
+  ctx.lineJoin = 'round';
+  lines.forEach((l, k) => {
+    const y = y0 + k * lh;
+    ctx.shadowColor = 'rgba(0,0,0,.6)';
+    ctx.shadowBlur = 24;
+    ctx.shadowOffsetY = 6;
+    ctx.lineWidth = Math.max(8, size * 0.12);
+    ctx.strokeStyle = '#000';
+    ctx.strokeText(l, x, y);
+    ctx.shadowColor = 'transparent';
+    // baris pertama berwarna aksen, sisanya putih (kecuali aksen = putih)
+    ctx.fillStyle = k === 0 || color === 'white' ? THUMB_COLORS[color] : '#ffffff';
+    ctx.fillText(l, x, y);
+  });
+}
+
+async function addThumbBg(src) {
+  const yt = ensureYt();
+  yt.bgs.unshift(await normalizeImage(src, 1600));
+  yt.bgs = yt.bgs.slice(0, 6);
+  yt.thumb.bg = 'g0';
+  renderThumbBgs();
+  drawThumb();
+  save();
+}
+
+$('#thumbUploadBtn').addEventListener('click', () => {
+  imgPicker.onchange = async () => {
+    const f = imgPicker.files[0];
+    imgPicker.value = '';
+    if (f) await addThumbBg(f);
+  };
+  imgPicker.click();
+});
+
+$('#thumbFlowBtn').addEventListener('click', (e) => busy(e.currentTarget, '⏳ Membuat latar di Flow…', async () => {
+  const prompt = ensureYt().thumbPrompt.trim();
+  if (!prompt) throw new Error('Prompt latar thumbnail masih kosong — klik "Buat Judul, Deskripsi & Thumbnail" dulu.');
+  const c = await checkFlow();
+  if (!c.ok) throw new Error(`Flow: ${c.reason}`);
+  if (S.ratio !== '16:9') toast('Ubah rasio di Flow ke 16:9 untuk thumbnail.');
+  const res = await chrome.tabs.sendMessage(c.tab.id, { type: 'TUYUL_FLOW_GENERATE', prompt, label: 'Thumbnail' });
+  if (!res?.ok) throw new Error(res?.error || 'Flow gagal membuat gambar.');
+  const outs = res.images?.length ? res.images : [res];
+  for (const o of outs.reverse()) await addThumbBg(o.image || o.url).catch(() => {});
+  toast(`${outs.length} latar thumbnail dari Flow ✓`, 'ok');
+}));
+
+$('#thumbDlBtn').addEventListener('click', async () => {
+  const c = new OffscreenCanvas(THUMB_W, THUMB_H);
+  await drawThumb(c);
+  let blob;
+  for (const q of [0.92, 0.85, 0.75, 0.65]) { // YouTube: maks 2 MB
+    blob = await c.convertToBlob({ type: 'image/jpeg', quality: q });
+    if (blob.size < 2e6) break;
+  }
+  const url = URL.createObjectURL(blob);
+  h('a', { href: url, download: `${safeName(ensureYt().title || S.title)} - thumbnail.jpg` }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  toast('Thumbnail diunduh ✓', 'ok');
+});
+
+let thumbSegs = [];
+
 // ---------------------------------------------------------------- settings
 
 function updateStatusLine() {
@@ -892,6 +1170,10 @@ async function init() {
   ];
   $('#ratioSeg').replaceChildren(...RATIOS.map((r) => h('button', { 'data-v': r.id }, r.id)));
   segSyncs.push(setupSeg($('#ratioSeg'), () => S.ratio, (v) => { S.ratio = v; }));
+  thumbSegs = [
+    setupSeg($('#thumbPosSeg'), () => ensureYt().thumb.pos, (v) => { ensureYt().thumb.pos = v; drawThumb(); }),
+    setupSeg($('#thumbColorSeg'), () => ensureYt().thumb.color, (v) => { ensureYt().thumb.color = v; drawThumb(); }),
+  ];
 
   $$('#stepper button').forEach((b) => b.addEventListener('click', () => go(Number(b.dataset.step))));
   $$('[data-next]').forEach((b) => b.addEventListener('click', () => go(S.step + 1)));

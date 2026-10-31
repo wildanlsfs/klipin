@@ -43,9 +43,12 @@ Butuh Chrome 116+ (desktop). Untuk langkah gambar perlu akun Google Flow (https:
    *🔁 Sinkronkan ulang* menghitung ulang waktu gambar & subtitle tanpa mengubah gambar. Prompt gambar dibuat AI per batch.
 4. **Gambar** – buka sebuah project di Google Flow (flow.google.com), set mode **gambar**, output per prompt = 1 → *Kirim Semua ke Flow*.
    Extension mengetik prompt, mengirim (dan mengulang kalau Flow masih sibuk), menunggu, lalu menarik gambar ke panel.
-   Scene gagal → ↻ atau ⬆ upload manual.
+   Kalau Flow membuat 2+ gambar per prompt, semuanya disimpan — klik **⇄** di gambar untuk memilih. Scene gagal → ↻ atau ⬆ upload manual.
 5. **Render** – resolusi 1080/720, FPS 24/30, subtitle → *Render MP4* (pilih lokasi simpan). Encode H.264 + AAC via WebCodecs,
    ±115 fps di 1080p (video 3 menit ≈ 40–50 detik).
+6. **YouTube** – *Buat Judul, Deskripsi & Thumbnail*: 5 pilihan judul (≤70 karakter), deskripsi siap tempel dengan hook,
+   **bab/timestamp otomatis dari waktu scene**, hashtag, dan tag (≤500 karakter). Thumbnail 1280×720: pilih latar dari gambar scene,
+   upload, atau *Buat latar khusus di Flow*; teks besar 2–4 kata (posisi & warna bisa diatur) → *Download Thumbnail (JPG)*.
 
 ## Struktur
 - `sidepanel.html/css`, `js/app.js` – UI & alur

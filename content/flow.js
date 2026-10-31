@@ -191,18 +191,23 @@
     }
     if (!found) throw new Error('Timeout: gambar tidak muncul di Flow.');
 
-    await sleep(1200); // beri waktu gambar resolusi penuh termuat
-    const src = found.currentSrc || found.src;
-    const dataUrl = await toDataUrl(found);
-
-    // Tunggu sisa output dari prompt yang sama (Flow bisa membuat 2–4 gambar) supaya tidak
-    // dikira hasil scene berikutnya.
-    let last = currentImages().length, stable = 0;
-    while (stable < 3 && Date.now() - t0 < timeoutMs) {
+    // Flow bisa membuat 2–4 gambar per prompt. Kumpulkan SEMUA output prompt ini (dipakai
+    // sebagai pilihan alternatif di side panel) dan tunggu sampai jumlahnya stabil, supaya
+    // gambar yang datang belakangan tidak dikira hasil scene berikutnya.
+    const freshImgs = () => currentImages().filter((img) => !seen.has(img.currentSrc || img.src));
+    let last = freshImgs().length, stable = 0;
+    while (stable < 5 && Date.now() - t0 < timeoutMs) {
       await sleep(1000);
-      const n = currentImages().length;
+      const n = freshImgs().length;
       stable = n === last ? stable + 1 : 0;
       last = n;
+    }
+    await sleep(1200); // beri waktu gambar resolusi penuh termuat
+    const outs = [found, ...freshImgs().filter((img) => img !== found)].slice(0, 4);
+    const images = [];
+    for (const img of outs) {
+      const dataUrl = await toDataUrl(img);
+      images.push({ image: dataUrl, url: img.currentSrc || img.src });
     }
     // tunggu Flow selesai menulis respons (tombol kirim tidak dalam mode stop/sibuk)
     for (let i = 0; i < 20; i++) {
@@ -213,8 +218,8 @@
       await sleep(1000);
     }
     markAllSeen();
-    status(`${label}: selesai ✓`);
-    return { image: dataUrl, url: src };
+    status(`${label}: selesai ✓ (${images.length} gambar)`);
+    return { ...images[0], images };
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
