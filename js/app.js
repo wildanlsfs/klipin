@@ -9,6 +9,7 @@ import { renderMp4, outputSize } from './render.js';
 import { kvGet, kvSet, kvDel } from './store.js';
 import { h, toast, errMsg, fillSelect } from './dom.js';
 import { mountSettings } from './settings-ui.js';
+import { startAgentBridge } from './agent.js';
 
 // ---------------------------------------------------------------- state
 
@@ -485,32 +486,42 @@ $('#fromScriptBtn').addEventListener('click', (e) => {
   busy(btn, '⏳ Membuat scene…', async () => {
     if (!S.script.trim()) throw new Error('Naskah masih kosong (langkah 2).');
     if (!confirmReplaceScenes()) return;
-    if (audioRaw && !audioTrim) doTrim();
-    const a = currentAudio();
-    const total = a ? audioLib.duration(a) : (S.script.split(/\s+/).length / (WPM[S.lang] || 135)) * 60;
-    if (!a) toast('Belum ada audio — durasi scene diperkirakan dari panjang naskah.');
-    S.scenes = scenesFromScript(S.script, total, S.sceneSec, audioPauses());
-    S.syncV = 2;
-    renderScenes();
-    await buildPrompts(btn);
+    await scenesFromScriptNow(btn);
   }).finally(() => setProgress('#sceneProgress', null));
 });
+
+async function scenesFromScriptNow(btn) {
+  if (!S.script.trim()) throw new Error('Naskah masih kosong (langkah 2).');
+  if (audioRaw && !audioTrim) doTrim();
+  const a = currentAudio();
+  const total = a ? audioLib.duration(a) : (S.script.split(/\s+/).length / (WPM[S.lang] || 135)) * 60;
+  if (!a) toast('Belum ada audio — durasi scene diperkirakan dari panjang naskah.');
+  S.scenes = scenesFromScript(S.script, total, S.sceneSec, audioPauses());
+  S.syncV = 2;
+  renderScenes();
+  await buildPrompts(btn);
+}
 
 $('#transcribeBtn').addEventListener('click', (e) => {
   const btn = e.currentTarget;
   busy(btn, '⏳ Mentranskrip audio…', async () => {
     if (!audioRaw) throw new Error('Upload audio dulu (langkah 2).');
     if (!confirmReplaceScenes()) return;
-    if (!audioTrim) doTrim();
-    const a = currentAudio();
-    const segs = await llm.transcribe(settings, { chunks: await audioLib.wavChunksForTranscription(a), lang: S.lang });
-    if (!segs.length) throw new Error('Transkrip kosong.');
-    S.scenes = snapToPauses(scenesFromTranscript(segs, audioLib.duration(a), S.sceneSec), audioPauses());
-    S.syncV = 2;
-    renderScenes();
-    await buildPrompts(btn);
+    await scenesFromTranscriptNow(btn);
   }).finally(() => setProgress('#sceneProgress', null));
 });
+
+async function scenesFromTranscriptNow(btn) {
+  if (!audioRaw) throw new Error('Upload audio dulu (langkah 2).');
+  if (!audioTrim) doTrim();
+  const a = currentAudio();
+  const segs = await llm.transcribe(settings, { chunks: await audioLib.wavChunksForTranscription(a), lang: S.lang });
+  if (!segs.length) throw new Error('Transkrip kosong.');
+  S.scenes = snapToPauses(scenesFromTranscript(segs, audioLib.duration(a), S.sceneSec), audioPauses());
+  S.syncV = 2;
+  renderScenes();
+  await buildPrompts(btn);
+}
 
 // ---------------------------------------------------------------- step 4: gambar via Flow
 
@@ -675,7 +686,7 @@ async function configureFlow(tabId, ratio = S.ratio) {
   return r;
 }
 
-async function runFlow(targets) {
+async function runFlow(targets, onProgress = () => {}) {
   if (!targets.length) return toast('Semua scene sudah punya gambar.', 'ok');
   if (targets.some((s) => !s.prompt)) return toast('Ada scene tanpa prompt. Buat scene dulu di langkah 3.', 'err');
   const c = await checkFlow();
@@ -694,6 +705,7 @@ async function runFlow(targets) {
       updateThumb(s);
       document.getElementById(`thumb-${s.i}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       setProgress('#flowProgress', k / targets.length);
+      onProgress(`scene ${s.i} (${k + 1}/${targets.length})`);
 
       let res = null;
       for (let attempt = 0; attempt < 2 && !flowStop; attempt++) {
@@ -736,6 +748,7 @@ async function runFlow(targets) {
     chrome.tabs.sendMessage(c.tab.id, { type: 'TUYUL_STATUS', text: flowStop ? 'dihentikan' : `selesai — ${ok} gambar` }).catch(() => {});
   }
   toast(`Flow selesai: ${ok} berhasil${fail ? `, ${fail} gagal (klik ↻ untuk ulang)` : ''}`, fail ? 'err' : 'ok');
+  return { ok, fail, stopped: flowStop };
 }
 
 $('#sendAllBtn').addEventListener('click', () => {
@@ -788,20 +801,8 @@ $('#renderBtn').addEventListener('click', async () => {
     }
   }
 
-  const btn = $('#renderBtn');
-  btn.disabled = true;
-  $('#cancelRenderBtn').classList.remove('hidden');
-  $('#resultVideo').classList.add('hidden');
-  renderAbort = new AbortController();
   try {
-    const out = await renderMp4({
-      scenes: S.scenes, audio: currentAudio(), pauses: audioPauses(), ratio: S.ratio, res: S.res, fps: S.fps, subtitles: S.subtitles,
-      fileHandle, signal: renderAbort.signal,
-      onProgress: ({ phase, pct, elapsed }) => {
-        setProgress('#renderProgress', pct);
-        $('#renderInfo').textContent = `${phase} ${Math.round(pct * 100)}%${elapsed ? ` · ${elapsed.toFixed(0)} detik` : ''}`;
-      },
-    });
+    const out = await renderVideo(fileHandle);
     let url;
     if (out.blob) {
       url = URL.createObjectURL(out.blob);
@@ -818,12 +819,33 @@ $('#renderBtn').addEventListener('click', async () => {
     console.error(e);
     $('#renderInfo').textContent = e.name === 'AbortError' ? 'Render dibatalkan.' : `❌ ${errMsg(e)}`;
     if (e.name !== 'AbortError') toast(errMsg(e), 'err');
+  }
+});
+
+// Render MP4 (dipakai tombol & AI agent). Tanpa fileHandle → hasilnya blob di memori.
+async function renderVideo(fileHandle = null, onProgress = () => {}) {
+  if (!S.scenes.some((s) => s.image)) throw new Error('Belum ada gambar scene (langkah 4).');
+  const btn = $('#renderBtn');
+  btn.disabled = true;
+  $('#cancelRenderBtn').classList.remove('hidden');
+  $('#resultVideo').classList.add('hidden');
+  renderAbort = new AbortController();
+  try {
+    return await renderMp4({
+      scenes: S.scenes, audio: currentAudio(), pauses: audioPauses(), ratio: S.ratio, res: S.res, fps: S.fps, subtitles: S.subtitles,
+      fileHandle, signal: renderAbort.signal,
+      onProgress: ({ phase, pct, elapsed }) => {
+        setProgress('#renderProgress', pct);
+        $('#renderInfo').textContent = `${phase} ${Math.round(pct * 100)}%${elapsed ? ` · ${elapsed.toFixed(0)} detik` : ''}`;
+        onProgress(`${phase} ${Math.round(pct * 100)}%`);
+      },
+    });
   } finally {
     setProgress('#renderProgress', null);
     btn.disabled = false;
     $('#cancelRenderBtn').classList.add('hidden');
   }
-});
+}
 $('#cancelRenderBtn').addEventListener('click', () => renderAbort?.abort());
 
 // ---------------------------------------------------------------- step 6: paket YouTube
@@ -865,6 +887,11 @@ function fitTags(tags, max = 480) { // batas YouTube 500 karakter total
 }
 
 $('#ytGenBtn').addEventListener('click', (e) => busy(e.currentTarget, '⏳ Menyusun paket YouTube…', async () => {
+  await makeYoutubePack();
+  toast('Paket YouTube siap ✓', 'ok');
+}));
+
+async function makeYoutubePack() {
   if (!S.script.trim() && !S.scenes.length) throw new Error('Naskah masih kosong (langkah 2).');
   const scenes = S.scenes.map((x) => ({ i: x.i, t: fmtTime(x.start), text: x.text }));
   const out = await llm.youtubePack(settings, {
@@ -885,8 +912,8 @@ $('#ytGenBtn').addEventListener('click', (e) => busy(e.currentTarget, '⏳ Menyu
   if (!yt.thumb.text || !yt.thumbTexts.includes(yt.thumb.text)) yt.thumb.text = out.thumbTexts[0] || '';
   renderYt();
   save();
-  toast('Paket YouTube siap ✓', 'ok');
-}));
+  return yt;
+}
 
 function renderYt() {
   const yt = ensureYt();
@@ -1058,6 +1085,11 @@ $('#thumbUploadBtn').addEventListener('click', () => {
 });
 
 $('#thumbFlowBtn').addEventListener('click', (e) => busy(e.currentTarget, '⏳ Membuat latar di Flow…', async () => {
+  const n = await thumbBgFromFlow();
+  toast(`${n} latar thumbnail dari Flow ✓`, 'ok');
+}));
+
+async function thumbBgFromFlow() {
   const prompt = ensureYt().thumbPrompt.trim();
   if (!prompt) throw new Error('Prompt latar thumbnail masih kosong — klik "Buat Judul, Deskripsi & Thumbnail" dulu.');
   const c = await checkFlow();
@@ -1068,10 +1100,10 @@ $('#thumbFlowBtn').addEventListener('click', (e) => busy(e.currentTarget, '⏳ M
   if (!res?.ok) throw new Error(res?.error || 'Flow gagal membuat gambar.');
   const outs = res.images?.length ? res.images : [res];
   for (const o of outs.reverse()) await addThumbBg(o.image || o.url).catch(() => {});
-  toast(`${outs.length} latar thumbnail dari Flow ✓`, 'ok');
-}));
+  return outs.length;
+}
 
-$('#thumbDlBtn').addEventListener('click', async () => {
+async function thumbBlob() {
   const c = new OffscreenCanvas(THUMB_W, THUMB_H);
   await drawThumb(c);
   let blob;
@@ -1079,6 +1111,11 @@ $('#thumbDlBtn').addEventListener('click', async () => {
     blob = await c.convertToBlob({ type: 'image/jpeg', quality: q });
     if (blob.size < 2e6) break;
   }
+  return blob;
+}
+
+$('#thumbDlBtn').addEventListener('click', async () => {
+  const blob = await thumbBlob();
   const url = URL.createObjectURL(blob);
   h('a', { href: url, download: `${safeName(ensureYt().title || S.title)} - thumbnail.jpg` }).click();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
@@ -1123,6 +1160,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 $('#newProjectBtn').addEventListener('click', async () => {
   if (!confirm('Mulai proyek baru? Judul, naskah, audio, scene & gambar saat ini akan dihapus.')) return;
+  await resetProject();
+});
+
+async function resetProject() {
   const keep = {
     lang: S.lang, visualStyle: S.visualStyle, ratio: S.ratio, ttsEngine: S.ttsEngine, ttsVoices: S.ttsVoices,
     res: S.res, fps: S.fps, subtitles: S.subtitles,
@@ -1132,7 +1173,286 @@ $('#newProjectBtn').addEventListener('click', async () => {
   await Promise.all([kvSet('state', S), kvDel('audioRaw'), kvDel('audioTrim')]);
   initUI();
   go(1);
+}
+
+// ---------------------------------------------------------------- AI agent (MCP)
+// Tool yang dipanggil Klipin MCP server (mcp/server.mjs). Memakai fungsi yang sama dengan tombol UI,
+// tanpa dialog konfirmasi; layar ikut pindah ke langkah yang sedang dikerjakan.
+
+const pickId = (list, id, what) => {
+  if (id == null || id === '') return null;
+  const hit = list.find((x) => String(x.id) === String(id));
+  if (!hit) throw new Error(`${what} "${id}" tidak dikenal. Pilihan: ${list.map((x) => x.id).join(', ')}`);
+  return hit.id;
+};
+const progressBtn = (progress) => ({ set textContent(v) { progress(v); } }); // buildPrompts menulis status ke "tombol"
+
+async function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const id = await chrome.downloads.download({ url, filename: `Klipin/${filename}`, conflictAction: 'uniquify', saveAs: false });
+    for (let i = 0; i < 600; i++) { // tunggu sampai file selesai ditulis (maks ±5 menit)
+      const [d] = await chrome.downloads.search({ id });
+      if (d?.state === 'complete') return d.filename;
+      if (d?.state === 'interrupted') throw new Error(`Gagal menyimpan file (${d.error})`);
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    return `Downloads/Klipin/${filename}`;
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+}
+
+function statusText() {
+  const a = currentAudio();
+  const imgs = S.scenes.filter((x) => x.image).length;
+  const ready = llm.providers(settings).filter((p) => p.ready).map((p) => p.name);
+  const tts = llm.ttsEngines(settings).filter((e) => e.ready).map((e) => e.id);
+  const words = S.script.trim() ? S.script.trim().split(/\s+/).length : 0;
+  return [
+    `Judul: ${S.title || '—'}${S.rawTitle && S.rawTitle !== S.title ? ` (ide: ${S.rawTitle})` : ''}`,
+    `Bahasa: ${S.lang} · format: ${S.format} · gaya narasi: ${S.narrStyle} · durasi target: ${S.minutes} menit`,
+    `Naskah: ${words ? `${words} kata` : 'belum ada'}`,
+    `Audio: ${a ? `${fmtTime(audioLib.duration(a))}${audioTrim ? ' (jeda sudah dipotong)' : ''}` : 'belum ada'}`,
+    `Gaya visual: ${S.visualStyle} · rasio ${S.ratio} · ±${S.sceneSec} detik/scene`,
+    `Scene: ${S.scenes.length} · prompt ${S.scenes.filter((x) => x.prompt).length} · gambar ${imgs}/${S.scenes.length}`,
+    `Paket YouTube: ${S.yt?.desc ? 'sudah' : 'belum'}`,
+    `AI siap: ${ready.join(', ') || 'BELUM ADA — pengguna perlu mengisi API key di ⚙︎ Klipin'} · TTS API: ${tts.join(', ') || 'tidak ada'}`,
+  ].join('\n');
+}
+
+const agentTools = {
+  async status() {
+    const flow = await connectFlow();
+    return { text: `${statusText()}\nGoogle Flow: ${flow.ok ? 'terhubung' : flow.reason}` };
+  },
+
+  async options() {
+    const ttsLines = llm.ttsEngines(settings).map((e) => `${e.id}${e.ready ? '' : ' (belum dikonfigurasi)'}`);
+    return {
+      text: [
+        `format: ${FORMATS.map((f) => `${f.id} (${f.label})`).join(', ')}`,
+        `narration_style: ${NARRATION_STYLES.map((n) => `${n.id} (${n.label})`).join(', ')}`,
+        `visual_style: ${VISUAL_STYLES.map((v) => `${v.id} (${v.label})`).join(', ')}`,
+        `ratio: ${RATIOS.map((r) => r.id).join(', ')}`,
+        `minutes: ${DURATIONS.join(', ')}`,
+        `TTS engine: ${ttsLines.join(', ')}`,
+        `Suara Gemini: ${VOICES.map((v) => `${v.name} (${v.gender === 'L' ? 'pria' : 'wanita'}, ${v.desc})`).join('; ')}`,
+        `Suara OpenAI: ${llm.OPENAI_VOICES.map((v) => v.id).join(', ')}`,
+      ].join('\n'),
+    };
+  },
+
+  async new_project({ idea, lang }) {
+    await resetProject();
+    if (lang) S.lang = lang === 'en' ? 'en' : 'id';
+    if (idea) S.rawTitle = S.title = String(idea).trim();
+    initUI();
+    go(1);
+    return { text: `Proyek baru dibuat.${idea ? ` Ide: ${idea}` : ''}` };
+  },
+
+  async titles({ idea, lang }) {
+    go(1);
+    if (lang) S.lang = lang === 'en' ? 'en' : 'id';
+    if (idea) S.rawTitle = String(idea).trim();
+    const raw = S.rawTitle.trim() || S.title;
+    if (!raw) throw new Error('Beri `idea` (ide/judul mentah).');
+    S.titleOptions = await llm.expandTitle(settings, raw, S.lang);
+    S.title = S.titleOptions[0] || raw;
+    $('#rawTitle').value = S.rawTitle;
+    renderTitleOptions();
+    save();
+    return { text: `Pilihan judul (yang pertama dipilih):\n${S.titleOptions.map((t, k) => `${k + 1}. ${t}`).join('\n')}` };
+  },
+
+  async set_title({ title }) {
+    S.title = String(title || '').trim();
+    if (!S.title) throw new Error('Judul kosong.');
+    if (!S.rawTitle) S.rawTitle = S.title;
+    renderTitleOptions();
+    save();
+    return { text: `Judul: ${S.title}` };
+  },
+
+  async write_script({ format, narration_style, minutes, lang, script }, progress) {
+    go(2);
+    S.format = pickId(FORMATS, format, 'format') || S.format;
+    const ns = pickId(NARRATION_STYLES, narration_style, 'narration_style');
+    if (ns && ns !== S.narrStyle) { S.narrStyle = ns; S.styleInstrEdited = false; }
+    if (minutes) S.minutes = Number(minutes);
+    if (lang) S.lang = lang === 'en' ? 'en' : 'id';
+    if (script) {
+      S.script = String(script).trim();
+    } else {
+      const title = S.title || S.rawTitle;
+      if (!title) throw new Error('Judul masih kosong — panggil klipin_titles atau klipin_set_title dulu.');
+      progress('menulis naskah…');
+      S.script = await llm.writeScript(settings, {
+        title, format: fmtStyle(), style: narrStyle(), minutes: S.minutes, lang: S.lang, wpm: WPM[S.lang] || 135,
+      });
+    }
+    initUI();
+    save();
+    const words = S.script.split(/\s+/).length;
+    return { text: `Naskah (${words} kata, ±${(words / (WPM[S.lang] || 135)).toFixed(1)} menit):\n\n${S.script}\n\nStyle instruction suara: ${S.styleInstr}` };
+  },
+
+  async voice({ engine, voice }, progress) {
+    go(2);
+    if (!S.script.trim()) throw new Error('Naskah masih kosong — panggil klipin_write_script dulu.');
+    if (engine) S.ttsEngine = pickId(llm.ttsEngines(settings), engine, 'engine');
+    const eng = ttsEngine();
+    if (!eng.ready) throw new Error(`${eng.name} belum dikonfigurasi (API key di ⚙︎ Klipin). Alternatif gratis: buat suara di Google AI Studio (${AI_STUDIO_TTS_URL}) lalu klipin_load_audio.`);
+    if (voice) S.ttsVoices[eng.kind] = String(voice);
+    renderTtsEngines();
+    const out = await llm.synthesize(settings, {
+      engine: eng.id, text: S.script, styleInstruction: S.styleInstr, voice: S.ttsVoices[eng.kind],
+      onProgress: (i, n) => { setProgress('#ttsProgress', i / n); progress(`suara bagian ${i}/${n}`); },
+    }).finally(() => setProgress('#ttsProgress', null));
+    await setAudio(out);
+    save();
+    return { text: `Suara selesai (${eng.name}, ${S.ttsVoices[eng.kind]}): ${fmtTime(audioLib.duration(out))}.` };
+  },
+
+  async load_audio({ name, base64 }) {
+    go(2);
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const a = await audioLib.decodeFile(new File([bytes], name || 'audio'));
+    await setAudio(a);
+    save();
+    return { text: `Audio "${name}" dimuat: ${fmtTime(audioLib.duration(a))}.` };
+  },
+
+  async scenes({ visual_style, ratio, scene_seconds, source }, progress) {
+    go(3);
+    S.visualStyle = pickId(VISUAL_STYLES, visual_style, 'visual_style') || S.visualStyle;
+    if (ratio) S.ratio = pickId(RATIOS, ratio, 'ratio');
+    if (scene_seconds) S.sceneSec = Math.max(3, Math.min(20, Number(scene_seconds)));
+    initUI();
+    if (source === 'transcript') await scenesFromTranscriptNow(progressBtn(progress));
+    else await scenesFromScriptNow(progressBtn(progress));
+    setProgress('#sceneProgress', null);
+    const list = S.scenes.map((x) => `${x.i}. [${fmtTime(x.start)}–${fmtTime(x.end)}] ${x.text.slice(0, 90)}${x.text.length > 90 ? '…' : ''}\n   prompt: ${x.prompt}`);
+    return { text: `${S.scenes.length} scene (gaya ${S.visualStyle}, rasio ${S.ratio}):\n${list.join('\n')}` };
+  },
+
+  async edit_scene({ scene, prompt }) {
+    const sc = S.scenes.find((x) => x.i === Number(scene));
+    if (!sc) throw new Error(`Scene ${scene} tidak ada (1–${S.scenes.length}).`);
+    sc.prompt = String(prompt).trim();
+    renderScenes();
+    save();
+    return { text: `Prompt scene ${sc.i} diganti. Panggil klipin_images dengan scenes: [${sc.i}] untuk membuat ulang gambarnya.` };
+  },
+
+  async images({ scenes, only_missing }, progress) {
+    go(4);
+    const nums = Array.isArray(scenes) && scenes.length ? new Set(scenes.map(Number)) : null;
+    const targets = S.scenes.filter((x) => (nums ? nums.has(x.i) : only_missing === false || !x.image));
+    if (!S.scenes.length) throw new Error('Belum ada scene — panggil klipin_scenes dulu.');
+    if (!targets.length) return { text: 'Semua scene sudah punya gambar.' };
+    const c = await checkFlow();
+    if (!c.ok) throw new Error(`Google Flow: ${c.reason}. Minta pengguna membuka ${FLOW_URL}, masuk/buat sebuah project, lalu ulangi.`);
+    const r = await runFlow(targets, progress);
+    const failed = S.scenes.filter((x) => x.status === 'error').map((x) => `${x.i} (${x.error})`);
+    return { text: `Gambar: ${r?.ok ?? 0} berhasil, ${r?.fail ?? 0} gagal. Total ${S.scenes.filter((x) => x.image).length}/${S.scenes.length} scene punya gambar.${failed.length ? `\nGagal: ${failed.join(', ')}` : ''}` };
+  },
+
+  async render({ resolution, fps, subtitles }, progress) {
+    go(5);
+    if (resolution) S.res = Number(resolution) === 720 ? 720 : 1080;
+    if (fps) S.fps = Number(fps) === 24 ? 24 : 30;
+    if (subtitles != null) S.subtitles = !!subtitles;
+    initUI();
+    renderSummary();
+    const out = await renderVideo(null, progress);
+    progress('menyimpan file…');
+    const file = await downloadBlob(out.blob, `${safeName(S.title || S.rawTitle)}.mp4`);
+    const v = $('#resultVideo');
+    v.src = URL.createObjectURL(out.blob);
+    v.classList.remove('hidden');
+    $('#renderInfo').textContent = `✅ Video jadi (${fmtTime(out.duration)}) — ${file}`;
+    return { text: `Video selesai dalam ${out.elapsed.toFixed(0)} detik: ${fmtTime(out.duration)}, ${out.width}×${out.height}.\nTersimpan di: ${file}` };
+  },
+
+  async youtube(_args, progress) {
+    go(6);
+    progress('menyusun judul, deskripsi, tag…');
+    const yt = await makeYoutubePack();
+    return {
+      text: `JUDUL (pilih satu):\n${yt.titles.map((t, k) => `${k + 1}. ${t}`).join('\n')}\n\nDESKRIPSI:\n${yt.desc}\n\nTAG:\n${yt.tags}\n\nTEKS THUMBNAIL: ${yt.thumbTexts.join(' | ')}\nPROMPT LATAR THUMBNAIL: ${yt.thumbPrompt}`,
+    };
+  },
+
+  async thumbnail({ text, background, position, color }, progress) {
+    go(6);
+    const yt = ensureYt();
+    if (text) yt.thumb.text = String(text);
+    if (!yt.thumb.text) yt.thumb.text = yt.thumbTexts[0] || (S.title || '').split(/\s+/).slice(0, 4).join(' ');
+    if (position) yt.thumb.pos = ['left', 'right', 'bottom'].includes(position) ? position : yt.thumb.pos;
+    if (color) yt.thumb.color = THUMB_COLORS[color] ? color : yt.thumb.color;
+    const m = /^scene:(\d+)$/.exec(String(background || ''));
+    if (m) {
+      if (!S.scenes.find((x) => x.i === Number(m[1]) && x.image)) throw new Error(`Scene ${m[1]} belum punya gambar.`);
+      yt.thumb.bg = `s${m[1]}`;
+    } else if (background === 'flow') {
+      if (!yt.thumbPrompt) throw new Error('Belum ada prompt latar — panggil klipin_youtube dulu.');
+      progress('membuat latar di Google Flow…');
+      await thumbBgFromFlow();
+    }
+    renderYt();
+    const blob = await thumbBlob();
+    const file = await downloadBlob(blob, `${safeName(yt.title || S.title)} - thumbnail.jpg`);
+    // pratinjau kecil untuk dilihat agent
+    const c = new OffscreenCanvas(THUMB_W, THUMB_H);
+    await drawThumb(c);
+    const small = new OffscreenCanvas(640, 360);
+    small.getContext('2d').drawImage(c, 0, 0, 640, 360);
+    const prev = await small.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
+    const b64 = await new Promise((resolve) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result).split(',')[1]);
+      fr.readAsDataURL(prev);
+    });
+    save();
+    return {
+      text: `Thumbnail tersimpan di: ${file}\nTeks: "${yt.thumb.text}" · posisi ${yt.thumb.pos} · warna ${yt.thumb.color} · latar ${currentBg()?.label || 'kosong'}`,
+      image: { data: b64, mimeType: 'image/jpeg' },
+    };
+  },
+};
+
+// ---- status koneksi agent di panel
+const AGENT_STATES = {
+  off: ['Mati', ''],
+  offline: ['Menunggu AI agent…', 'Belum ada AI agent yang terhubung. Pasang Klipin MCP di Claude/Cursor (lihat langkah di bawah).'],
+  online: ['Terhubung ✓', 'AI agent terhubung. Minta agent-mu, mis. "buatkan video Klipin tentang budidaya lele 3 menit".'],
+  standby: ['Dipakai jendela lain', 'AI agent sedang terhubung ke panel Klipin lain (tab/jendela lain).'],
+  working: ['Bekerja…', 'AI agent sedang menjalankan Klipin.'],
+};
+const agentBridge = startAgentBridge(agentTools, (state, info) => {
+  const btn = $('#agentBtn');
+  btn.dataset.state = state;
+  btn.title = `AI agent: ${AGENT_STATES[state][0]}`;
+  $('#agentState').textContent = AGENT_STATES[state][0] + (state === 'working' && info ? ` (${info.replace(/^klipin_/, '')})` : '');
+  $('#agentState').className = `pill ${state === 'online' || state === 'working' ? 'ok' : ''}`;
+  $('#agentHint').textContent = AGENT_STATES[state][1];
 });
+// dinyalakan di akhir init(), setelah proyek tersimpan selesai dimuat
+async function startAgent() {
+  const { agentBridge: on = true } = await chrome.storage.local.get('agentBridge');
+  $('#agentToggle').checked = on;
+  agentBridge.setEnabled(on);
+}
+$('#agentToggle').addEventListener('change', (e) => {
+  chrome.storage.local.set({ agentBridge: e.target.checked });
+  agentBridge.setEnabled(e.target.checked);
+});
+$('#agentBtn').addEventListener('click', () => $('#agentDlg').showModal());
+$('#agentCloseBtn').addEventListener('click', () => $('#agentDlg').close());
 
 // ---------------------------------------------------------------- init
 
@@ -1198,6 +1518,7 @@ async function init() {
     setTimeout(() => toast('Waktu scene disinkronkan ulang dengan audio (versi baru).', 'ok'), 800);
   }
   if (!llm.providers(settings).some((p) => p.ready)) openSettings();
+  startAgent();
 }
 
 init();

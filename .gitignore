@@ -3,3 +3,5 @@
 versi-lama-v3/
 *.mp4
 *.wav
+mcp/*.mcpb
+*.bak

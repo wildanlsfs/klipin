@@ -1,0 +1,109 @@
+{
+  "manifest_version": "0.3",
+  "name": "klipin",
+  "display_name": "Klipin",
+  "version": "1.0.0",
+  "description": "Make faceless YouTube videos with the Klipin Chrome extension: title, script, voice, scenes, Google Flow images, MP4 render, YouTube pack & thumbnail.",
+  "long_description": "Connects your AI agent to the Klipin Chrome extension running on this computer. Keep Chrome open with the Klipin panel (click the Klipin icon) — the agent can then write the script, sync scenes to the voice-over, generate images in Google Flow, render the MP4 and prepare titles, description, tags and a thumbnail. Everything runs locally; API keys stay inside the extension.",
+  "author": {
+    "name": "wildanlsfs",
+    "url": "https://github.com/wildanlsfs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wildanlsfs/klipin"
+  },
+  "homepage": "https://github.com/wildanlsfs/klipin",
+  "support": "https://github.com/wildanlsfs/klipin/issues",
+  "icon": "icon.png",
+  "license": "MIT",
+  "keywords": [
+    "youtube",
+    "video",
+    "faceless",
+    "google flow",
+    "chrome extension"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "server.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server.mjs"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "klipin_status",
+      "description": "Show the current Klipin project: title, script, audio, scenes/prompts/images, YouTube pack, Flow tab connection and which AI providers are configured. Call this first."
+    },
+    {
+      "name": "klipin_options",
+      "description": "List valid ids for content formats, narration styles, visual styles, aspect ratios, durations and TTS voices."
+    },
+    {
+      "name": "klipin_new_project",
+      "description": "Start a new empty project (clears title, script, audio, scenes and images; keeps language/style preferences)."
+    },
+    {
+      "name": "klipin_titles",
+      "description": "Generate 5 catchy YouTube title options from a raw idea and select the first one."
+    },
+    {
+      "name": "klipin_set_title",
+      "description": "Set the final video title."
+    },
+    {
+      "name": "klipin_write_script",
+      "description": "Write the voice-over script with AI from the title (or set your own script with `script`). Returns the script."
+    },
+    {
+      "name": "klipin_voice",
+      "description": "Generate the voice-over directly via a TTS API (Gemini / OpenAI / ElevenLabs key needed in Klipin settings). Alternative: the user makes it for free in Google AI Studio and you load the file with klip"
+    },
+    {
+      "name": "klipin_load_audio",
+      "description": "Load a voice-over audio file (wav/mp3/m4a/…) from this computer into the project, e.g. a file the user downloaded from Google AI Studio."
+    },
+    {
+      "name": "klipin_scenes",
+      "description": "Trim silences, split the narration into timed scenes synced to the audio, and write an image prompt per scene. Replaces existing scenes."
+    },
+    {
+      "name": "klipin_edit_scene",
+      "description": "Change the image prompt of one scene (then call klipin_images with that scene to regenerate it)."
+    },
+    {
+      "name": "klipin_images",
+      "description": "Generate scene images in Google Flow (the user must have a Flow project open in Chrome). Long-running: returns a job_id if not finished — then call klipin_wait."
+    },
+    {
+      "name": "klipin_render",
+      "description": "Render the final MP4 (images + voice-over + subtitles) and save it to the Downloads/Klipin folder. Long-running: may return a job_id — then call klipin_wait."
+    },
+    {
+      "name": "klipin_youtube",
+      "description": "Create the YouTube upload pack: 5 titles, description with auto chapters/timestamps and hashtags, tags, thumbnail text ideas and a thumbnail background prompt."
+    },
+    {
+      "name": "klipin_thumbnail",
+      "description": "Compose a 1280x720 YouTube thumbnail (background image + big text), save it as JPG to Downloads/Klipin and return a preview."
+    },
+    {
+      "name": "klipin_wait",
+      "description": "Wait (up to ~50 s) for a long-running job (images, render, voice) and report its progress/result."
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

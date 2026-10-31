@@ -16,6 +16,7 @@
       </div>
     </div>
     <div class="top-actions">
+      <button class="icon-btn" id="agentBtn" title="AI agent">🤖</button>
       <button class="icon-btn" id="newProjectBtn" title="Proyek baru">＋</button>
       <button class="icon-btn" id="settingsBtn" title="Pengaturan API">⚙︎</button>
     </div>
@@ -325,6 +326,31 @@
     <h2>⚙︎ Pengaturan AI</h2>
     <p class="hint">Key disimpan lokal di browser ini dan hanya dikirim ke provider yang bersangkutan. <a href="#" id="openOptionsLink">Buka di tab penuh ↗</a></p>
     <div id="settingsRoot"></div>
+  </dialog>
+
+  <!-- ============ AI AGENT (MCP) ============ -->
+  <dialog id="agentDlg">
+    <div class="label-row">
+      <h2>🤖 Kendalikan Klipin dengan AI agent</h2>
+      <span class="pill" id="agentState">…</span>
+    </div>
+    <p class="hint" id="agentHint"></p>
+    <label class="check"><input type="checkbox" id="agentToggle" /> Izinkan AI agent di komputer ini memakai Klipin</label>
+
+    <div class="card">
+      <h3>Cara pasang (sekali saja)</h3>
+      <p class="hint"><b>Claude Desktop</b> (paling mudah):</p>
+      <ol class="hint tight">
+        <li>Download <b>klipin.mcpb</b> dari halaman Releases Klipin di GitHub.</li>
+        <li>Klik dua kali file itu → Claude Desktop terbuka → klik <b>Install</b>.</li>
+      </ol>
+      <p class="hint"><b>Claude Code / Cursor / lainnya</b>: buka folder <code>mcp</code> di folder Klipin, lalu klik dua kali
+        <b>Pasang-Klipin-MCP</b> (<code>.command</code> di Mac, <code>.bat</code> di Windows).</p>
+      <p class="hint">Setelah itu, biarkan Chrome terbuka dengan panel Klipin, lalu minta agent-mu:<br />
+        <i>"Pakai Klipin, buatkan video 3 menit tentang budidaya lele untuk pemula."</i></p>
+    </div>
+    <p class="hint">Agent hanya bisa terhubung dari komputer ini (localhost). API key tidak pernah dikirim ke agent.</p>
+    <button class="btn" id="agentCloseBtn">Tutup</button>
   </dialog>
 
   <div class="toast hidden" id="toast"></div>

@@ -19,6 +19,32 @@ Klik gambar di atas untuk menonton / download video tutorial (MP4, 66 detik).
 
 Butuh Chrome 116+ (desktop). Untuk langkah gambar perlu akun Google Flow (https://flow.google.com).
 
+## 🤖 Pakai lewat AI agent (Claude, Cursor, …)
+Klipin bisa dikendalikan AI agent lewat MCP. Kamu cukup bilang:
+*"Pakai Klipin, buatkan video 3 menit tentang budidaya lele untuk pemula"*, lalu agent menulis naskah,
+membuat scene, menyuruh Google Flow membuat gambar, me-render MP4, sampai menyiapkan judul, deskripsi, dan thumbnail.
+
+**Pasang (sekali saja):**
+- **Claude Desktop** (paling mudah, tidak perlu install apa-apa lagi):
+  1. Download **`klipin.mcpb`** dari halaman [Releases](https://github.com/wildanlsfs/klipin/releases/latest).
+  2. Klik dua kali file itu → Claude Desktop terbuka → klik **Install**.
+- **Claude Code, Cursor, Windsurf**: butuh [Node.js](https://nodejs.org/id/download) (versi LTS). Buka folder `mcp` di folder Klipin,
+  lalu klik dua kali **`Pasang-Klipin-MCP.command`** (Mac) atau **`Pasang-Klipin-MCP.bat`** (Windows). Skrip ini mendaftarkan
+  Klipin ke semua aplikasi yang ditemukan. Tutup lalu buka lagi aplikasinya.
+  - Mac menolak membuka file? Klik kanan → **Open** → **Open**.
+  - Cara manual (aplikasi lain): `node /path/ke/klipin/mcp/server.mjs` sebagai server MCP stdio.
+
+**Pakai:**
+1. Buka Chrome, klik ikon Klipin. Tombol 🤖 di panel memberi titik hijau saat agent terhubung.
+   (Kalau panel belum terbuka saat agent mulai bekerja, Klipin membukanya sendiri di tab dalam ±30 detik.)
+2. Untuk gambar: buka sebuah project di [Google Flow](https://flow.google.com).
+3. Suara: agent bisa membuat suara via API (kalau key TTS diisi), atau kamu buat gratis di Google AI Studio lalu
+   beri tahu agent lokasi filenya (mis. *"audionya di Downloads/lele.wav"*).
+4. Hasil MP4 & thumbnail tersimpan di folder **Downloads/Klipin**.
+
+Keamanan: server hanya mendengarkan di `127.0.0.1` dan hanya menerima permintaan dari extension Klipin.
+API key tetap di extension dan tidak dikirim ke agent. Matikan kapan saja lewat 🤖 → centang "Izinkan AI agent".
+
 ## Privasi
 - API key disimpan hanya di `chrome.storage.local` di komputermu dan hanya dikirim ke provider yang kamu pilih.
 - Project (naskah, audio, gambar) disimpan di IndexedDB browser kamu. Tidak ada data yang dikirim ke server pembuat extension.
@@ -59,6 +85,7 @@ Butuh Chrome 116+ (desktop). Untuk langkah gambar perlu akun Google Flow (https:
 - `js/scenes.js` – pembagian scene, penyelarasan kalimat ↔ jeda audio, subtitle
 - `js/render.js` – render MP4 (lib/mp4-muxer.mjs, MIT)
 - `content/flow.js` – otomasi Google Flow
+- `js/agent.js`, `mcp/` – jembatan & server MCP untuk AI agent (`mcp/server.mjs` tanpa dependensi)
 
 ## Catatan
 - Proyek independen, tidak berafiliasi dengan Google. Otomasi Google Flow membaca tampilan halaman Flow,
