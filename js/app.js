@@ -667,6 +667,14 @@ function pickImageFor(scene) {
   });
 }
 
+// Atur Flow sebelum mulai: mode langsung (bukan Agen), Gambar, rasio proyek, 1 gambar per prompt.
+async function configureFlow(tabId, ratio = S.ratio) {
+  const r = await chrome.tabs.sendMessage(tabId, { type: 'TUYUL_FLOW_CONFIGURE', ratio, count: 1 }).catch(() => null);
+  if (r?.ok && r.changed?.length) toast(`Flow diatur otomatis: ${r.changed.join(', ')}`, 'ok');
+  else if (r && !r.ok) toast(r.error, 'err');
+  return r;
+}
+
 async function runFlow(targets) {
   if (!targets.length) return toast('Semua scene sudah punya gambar.', 'ok');
   if (targets.some((s) => !s.prompt)) return toast('Ada scene tanpa prompt. Buat scene dulu di langkah 3.', 'err');
@@ -674,6 +682,7 @@ async function runFlow(targets) {
   if (!c.ok) return toast(`Flow: ${c.reason}`, 'err');
 
   flowStop = false;
+  await configureFlow(c.tab.id);
   $('#sendAllBtn').disabled = true;
   $('#stopFlowBtn').classList.remove('hidden');
   let ok = 0, fail = 0;
@@ -689,7 +698,7 @@ async function runFlow(targets) {
       let res = null;
       for (let attempt = 0; attempt < 2 && !flowStop; attempt++) {
         res = await chrome.tabs.sendMessage(c.tab.id, {
-          type: 'TUYUL_FLOW_GENERATE', prompt: s.prompt, label: `Scene ${s.i}/${S.scenes.length}`,
+          type: 'TUYUL_FLOW_GENERATE', prompt: s.prompt, label: `Scene ${s.i}/${S.scenes.length}`, count: 1,
         }).catch((e) => ({ ok: false, error: errMsg(e) }));
         if (res?.ok) break;
         if (/tidak ditemukan|Receiving end/i.test(res?.error || '')) break; // bukan masalah sementara
@@ -1053,8 +1062,9 @@ $('#thumbFlowBtn').addEventListener('click', (e) => busy(e.currentTarget, '⏳ M
   if (!prompt) throw new Error('Prompt latar thumbnail masih kosong — klik "Buat Judul, Deskripsi & Thumbnail" dulu.');
   const c = await checkFlow();
   if (!c.ok) throw new Error(`Flow: ${c.reason}`);
-  if (S.ratio !== '16:9') toast('Ubah rasio di Flow ke 16:9 untuk thumbnail.');
-  const res = await chrome.tabs.sendMessage(c.tab.id, { type: 'TUYUL_FLOW_GENERATE', prompt, label: 'Thumbnail' });
+  await configureFlow(c.tab.id, '16:9');
+  const res = await chrome.tabs.sendMessage(c.tab.id, { type: 'TUYUL_FLOW_GENERATE', prompt, label: 'Thumbnail', count: 1 })
+    .finally(() => S.ratio !== '16:9' && configureFlow(c.tab.id)); // kembalikan rasio proyek
   if (!res?.ok) throw new Error(res?.error || 'Flow gagal membuat gambar.');
   const outs = res.images?.length ? res.images : [res];
   for (const o of outs.reverse()) await addThumbBg(o.image || o.url).catch(() => {});

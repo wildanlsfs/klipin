@@ -41,9 +41,10 @@ Butuh Chrome 116+ (desktop). Untuk langkah gambar perlu akun Google Flow (https:
 3. **Scene** – pilih gaya visual & rasio. Jeda/diam dipotong otomatis. *Buat scene dari naskah* (waktu tiap kalimat
    diselaraskan ke jeda nyata di audio) atau *Transkrip otomatis + buat scene* (kalau naskah berbeda dari yang dibacakan).
    *🔁 Sinkronkan ulang* menghitung ulang waktu gambar & subtitle tanpa mengubah gambar. Prompt gambar dibuat AI per batch.
-4. **Gambar** – buka sebuah project di Google Flow (flow.google.com), set mode **gambar**, output per prompt = 1 → *Kirim Semua ke Flow*.
+4. **Gambar** – buka sebuah project di Google Flow (flow.google.com) → *Kirim Semua ke Flow*. Klipin otomatis mengatur Flow ke mode langsung
+   (bukan Agen), **Gambar**, rasio proyek, dan **x1** gambar per prompt.
    Extension mengetik prompt, mengirim (dan mengulang kalau Flow masih sibuk), menunggu, lalu menarik gambar ke panel.
-   Kalau Flow membuat 2+ gambar per prompt, semuanya disimpan — klik **⇄** di gambar untuk memilih. Scene gagal → ↻ atau ⬆ upload manual.
+   Kalau Flow tetap membuat 2+ gambar per prompt, semuanya disimpan — klik **⇄** di gambar untuk memilih. Scene gagal → ↻ atau ⬆ upload manual.
 5. **Render** – resolusi 1080/720, FPS 24/30, subtitle → *Render MP4* (pilih lokasi simpan). Encode H.264 + AAC via WebCodecs,
    ±115 fps di 1080p (video 3 menit ≈ 40–50 detik).
 6. **YouTube** – *Buat Judul, Deskripsi & Thumbnail*: 5 pilihan judul (≤70 karakter), deskripsi siap tempel dengan hook,

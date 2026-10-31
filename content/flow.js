@@ -119,6 +119,62 @@
     return false;
   }
 
+  // ---- Atur Flow: mode langsung (bukan Agen), Gambar, rasio, jumlah output per prompt ----
+  const radios = (root) => [...root.querySelectorAll('button[role=radio]')].filter(visible);
+  const radioText = (b) => (b.innerText || '').replace(/\s+/g, ' ').trim();
+  const openPane = () => [...document.querySelectorAll('.cdk-overlay-pane')].reverse().find((p) => radios(p).length);
+
+  async function closePane(trig) {
+    for (const act of [
+      () => document.querySelector('.cdk-overlay-backdrop')?.click(),
+      () => (document.activeElement || document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true })),
+      () => trig.click(),
+    ]) {
+      if (!openPane()) return;
+      act();
+      await sleep(400);
+    }
+  }
+
+  async function configure({ ratio = '16:9', count = 1 }) {
+    const done = [];
+    // Mode Agen = AI chat yang memutuskan sendiri jumlah gambar & minta konfirmasi → lambat.
+    const agent = document.querySelector('button.agent-mode-chip');
+    if (agent?.getAttribute('aria-pressed') === 'true') {
+      agent.click();
+      await sleep(900);
+      done.push('mode Agen dimatikan');
+    }
+    const trig = document.querySelector('button.settings-trigger-button')
+      || [...document.querySelectorAll('button')].filter(visible).find((b) => /\bx[1-4]\b/.test(b.innerText || '') && /setelan|settings/i.test(b.getAttribute('aria-label') || ''));
+    if (!trig) return { ok: false, error: 'Tombol setelan pembuatan di Flow tidak ditemukan.' };
+
+    trig.click();
+    await sleep(700);
+    let pane = openPane();
+    if (!pane) return { ok: false, error: 'Panel setelan Flow tidak terbuka.' };
+    const pick = async (match, what) => {
+      pane = openPane() || pane;
+      const b = radios(pane).find((x) => match(radioText(x)));
+      if (!b) return false;
+      if (b.getAttribute('aria-checked') !== 'true') {
+        b.click();
+        await sleep(500);
+        done.push(what);
+      }
+      return true;
+    };
+    const okImg = await pick((t) => /(^|\s)image(\s|$)/.test(t) || /^(image\s+)?(gambar|image)$/i.test(t), 'mode Gambar');
+    const okRatio = await pick((t) => t.split(' ').includes(ratio), `rasio ${ratio}`);
+    const okCount = await pick((t) => t === `x${count}`, `x${count} per prompt`);
+    await closePane(trig);
+
+    const label = (trig.innerText || '').replace(/\s+/g, ' ');
+    const ok = okImg && okCount && label.includes(`x${count}`);
+    status(ok ? `Flow diatur: gambar ${okRatio ? ratio : ''} x${count}` : 'gagal mengatur Flow otomatis');
+    return ok ? { ok, changed: done, label } : { ok, error: `Tidak bisa mengatur Flow otomatis (${label || '?'}). Atur manual: Gambar, ${ratio}, x${count}.` };
+  }
+
   function currentImages() {
     return [...document.querySelectorAll('img')].filter(
       (img) => img.complete && img.naturalWidth >= 256 && img.naturalHeight >= 256 && img.src && !img.src.startsWith('data:image/svg'),
@@ -168,7 +224,7 @@
     badge.style.display = text ? 'block' : 'none';
   }
 
-  async function generate({ prompt, label, timeoutMs = 180000 }) {
+  async function generate({ prompt, label, count = 1, timeoutMs = 180000 }) {
     const input = findInput();
     if (!input) throw new Error('Kolom prompt Flow tidak ditemukan. Buka sebuah project di Flow dulu.');
     status(`${label}: mengetik prompt…`);
@@ -191,18 +247,18 @@
     }
     if (!found) throw new Error('Timeout: gambar tidak muncul di Flow.');
 
-    // Flow bisa membuat 2–4 gambar per prompt. Kumpulkan SEMUA output prompt ini (dipakai
-    // sebagai pilihan alternatif di side panel) dan tunggu sampai jumlahnya stabil, supaya
-    // gambar yang datang belakangan tidak dikira hasil scene berikutnya.
+    // Kalau Flow tetap membuat 2–4 gambar, kumpulkan semuanya (pilihan ⇄ di side panel) dan
+    // tunggu sampai jumlahnya stabil, supaya gambar yang datang belakangan tidak dikira hasil
+    // scene berikutnya. Dengan x1 cukup jeda singkat.
     const freshImgs = () => currentImages().filter((img) => !seen.has(img.currentSrc || img.src));
     let last = freshImgs().length, stable = 0;
-    while (stable < 5 && Date.now() - t0 < timeoutMs) {
+    while (stable < (count > 1 ? 5 : 2) && Date.now() - t0 < timeoutMs) {
       await sleep(1000);
       const n = freshImgs().length;
       stable = n === last ? stable + 1 : 0;
       last = n;
     }
-    await sleep(1200); // beri waktu gambar resolusi penuh termuat
+    await sleep(count > 1 ? 1200 : 600); // beri waktu gambar resolusi penuh termuat
     const outs = [found, ...freshImgs().filter((img) => img !== found)].slice(0, 4);
     const images = [];
     for (const img of outs) {
@@ -226,6 +282,11 @@
     if (msg?.type === 'TUYUL_PING') {
       sendResponse({ ok: true, hasInput: !!findInput(), url: location.href });
       return false;
+    }
+    if (msg?.type === 'TUYUL_FLOW_CONFIGURE') {
+      if (busy) { sendResponse({ ok: false, error: 'Flow sedang memproses prompt.' }); return false; }
+      configure(msg).then(sendResponse, (e) => sendResponse({ ok: false, error: e.message }));
+      return true;
     }
     if (msg?.type === 'TUYUL_STATUS') {
       status(msg.text || '');
