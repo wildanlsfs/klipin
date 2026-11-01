@@ -586,7 +586,15 @@ chrome.tabs.onActivated.addListener(recheckFlowSoon);
 chrome.tabs.onRemoved.addListener(recheckFlowSoon);
 
 async function normalizeImage(src, maxSide = 1920) {
-  const blob = src instanceof Blob ? src : await (await fetch(src, { credentials: 'include' })).blob();
+  let blob = src instanceof Blob ? src : null;
+  for (const credentials of ['include', 'omit']) { // domain gambar Flow menolak fetch ber-cookie
+    if (blob) break;
+    try {
+      const res = await fetch(src, { credentials });
+      if (res.ok) blob = await res.blob();
+    } catch {}
+  }
+  if (!blob) throw new Error('Gambar tidak bisa diunduh.');
   const bmp = await createImageBitmap(blob);
   const k = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
   const c = new OffscreenCanvas(Math.round(bmp.width * k), Math.round(bmp.height * k));

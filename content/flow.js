@@ -205,9 +205,13 @@
   async function toDataUrl(img) {
     const src = img.currentSrc || img.src;
     if (src.startsWith('data:')) return src;
-    try {
-      const res = await fetch(src, { credentials: 'include' });
-      if (res.ok) {
+    // Gambar resolusi penuh ada di domain lain (flow-content.google) yang menolak fetch ber-cookie
+    // dan membuat canvas "tainted" → untuk domain lain ambil tanpa cookie.
+    const sameOrigin = (() => { try { return new URL(src, location.href).origin === location.origin; } catch { return false; } })();
+    for (const credentials of sameOrigin ? ['include', 'omit'] : ['omit', 'include']) {
+      try {
+        const res = await fetch(src, { credentials });
+        if (!res.ok) continue;
         const blob = await res.blob();
         if (blob.type.startsWith('image/')) {
           return await new Promise((resolve, reject) => {
@@ -217,8 +221,8 @@
             fr.readAsDataURL(blob);
           });
         }
-      }
-    } catch {}
+      } catch {}
+    }
     try {
       const c = document.createElement('canvas');
       c.width = img.naturalWidth;
