@@ -36,24 +36,45 @@ const lowerBound = (arr, t) => {
  * perkiraan dari panjang teks, dioptimalkan sekaligus (DP) sehingga selisih tidak menumpuk.
  * Return: array waktu batas, panjang weights.length + 1 (b[0] = t0, b[n] = t1).
  */
-export function alignUnits(weights, t0, t1, pauses = [], prior = null) {
+// `soft[k]` = true → batas ke-k jatuh di tengah frasa (bukan di tanda baca), jadi tidak ditarik kuat ke jeda.
+export function alignUnits(weights, t0, t1, pauses = [], prior = null, soft = null) {
   const n = weights.length;
-  const span = t1 - t0;
+  if (n <= 1) return [t0, t1];
+  const inRange = pauses.filter((p) => p.t > t0 + 0.05 && p.t < t1 - 0.05);
+  // Waktu bicara (tanpa jeda) dari t0 sampai t. Panjang kalimat dibandingkan dengan waktu bicara,
+  // bukan waktu total: narator sering berhenti lama di koma/daftar ("tenaga, bumbu, kemasan"),
+  // dan jeda itu tidak boleh dihitung sebagai "kalimatnya sudah selesai".
+  const gaps = inRange.map((p) => [Math.max(t0, p.start), Math.min(t1, p.end)]).filter(([a, b]) => b > a);
+  const gapCum = [0];
+  for (const [a, b] of gaps) gapCum.push(gapCum[gapCum.length - 1] + (b - a));
+  const speechAt = (t) => {
+    let lo = 0, hi = gaps.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (gaps[m][0] < t) lo = m + 1; else hi = m; }
+    let g = gapCum[lo];
+    if (lo > 0 && gaps[lo - 1][1] > t) g -= gaps[lo - 1][1] - t; // t berada di dalam jeda
+    return t - t0 - g;
+  };
+  const speechSpan = Math.max(0.1, speechAt(t1));
+  const timeAtSpeech = (sp) => { // kebalikan speechAt
+    let t = t0 + sp;
+    for (const [a, b] of gaps) { if (a < t) t += b - a; else break; }
+    return Math.min(t1, t);
+  };
   const W = weights.reduce((a, b) => a + b, 0) || 1;
-  let exp = weights.map((w) => (span * w) / W);
+  let exp = weights.map((w) => (speechSpan * w) / W);
   const cum = [0];
   for (const w of weights) cum.push(cum[cum.length - 1] + w);
-  let prop = cum.map((c) => t0 + (span * c) / W);
-  if (n <= 1) return [t0, t1];
+  let prop = cum.map((c) => timeAtSpeech((speechSpan * c) / W));
+  prop[0] = t0; prop[n] = t1;
   // Perkiraan batas dari luar (mis. timestamp transkrip AI) dipakai sebagai titik awal pencarian
   // dan perkiraan durasi tiap potongan; tetap dikunci ke jeda nyata di audio.
   if (prior?.length === n + 1) {
-    prop = prior.map((t, k) => (k === 0 ? t0 : k === n ? t1 : Math.min(t1, Math.max(t0, t))));
-    exp = exp.map((e, i) => Math.max(0.2, (prop[i + 1] - prop[i] + e) / 2));
+    const pr = prior.map((t, k) => (k === 0 ? t0 : k === n ? t1 : Math.min(t1, Math.max(t0, t))));
+    exp = exp.map((e, i) => Math.max(0.2, (Math.max(0, speechAt(pr[i + 1]) - speechAt(pr[i])) + e) / 2));
+    prop = prop.map((t, k) => (t + pr[k]) / 2);
   }
 
-  const inRange = pauses.filter((p) => p.t > t0 + 0.05 && p.t < t1 - 0.05);
-  const win = Math.max(4, span * 0.12);
+  const win = Math.max(4, span(t0, t1) * 0.12);
   // Akhir kalimat biasanya jeda terpanjang; nilai jeda menurut peringkat durasinya di rentang ini
   // (koma = jeda pendek → bobot kecil), jadi tahan terhadap narasi yang cepat-lambat.
   const sortedDur = inRange.map((p) => p.dur).sort((a, b) => a - b);
@@ -64,36 +85,38 @@ export function alignUnits(weights, t0, t1, pauses = [], prior = null) {
     const list = [];
     for (let j = lowerBound(inRange, prop[k] - win); j < inRange.length && inRange[j].t <= prop[k] + win; j++) {
       const p = inRange[j];
-      list.push({ t: p.t, bonus: -1 * rank(p.dur) - 3 * Math.min(p.dur, 0.6) / 0.6 });
+      const pull = soft?.[k] ? 0.25 : 1;
+      list.push({ t: p.t, sp: speechAt(p.t), bonus: -pull * (rank(p.dur) + 3 * Math.min(p.dur, 0.6) / 0.6) });
     }
-    list.push({ t: prop[k], bonus: 0.8 });
+    list.push({ t: prop[k], sp: speechAt(prop[k]), bonus: 0.8 });
     cands.push(list);
   }
   const unitCost = (i, a, b) => {
-    const d = b - a;
-    if (d < 0.12) return Infinity;
+    const d = b.sp - a.sp;
+    if (b.t - a.t < 0.12) return Infinity;
     // rasio (bukan selisih detik): kalimat dibaca 1,5× lebih cepat/lambat dinilai wajar
     const r = Math.log((d + 0.3) / (exp[i] + 0.3));
-    return r * r;
+    return 4 * r * r;
   };
 
-  let prev = [{ t: t0, cost: 0, back: -1 }];
+  let prev = [{ t: t0, sp: 0, cost: 0, back: -1 }];
   const table = [prev];
   for (let k = 1; k < n; k++) {
     const cur = cands[k].map((c) => {
       let best = Infinity, back = -1;
       for (let j = 0; j < prev.length; j++) {
-        const v = prev[j].cost + unitCost(k - 1, prev[j].t, c.t);
+        const v = prev[j].cost + unitCost(k - 1, prev[j], c);
         if (v < best) { best = v; back = j; }
       }
-      return { t: c.t, cost: best + c.bonus, back };
+      return { t: c.t, sp: c.sp, cost: best + c.bonus, back };
     });
     table.push(cur);
     prev = cur;
   }
+  const end = { t: t1, sp: speechSpan };
   let best = Infinity, bi = -1;
   prev.forEach((c, j) => {
-    const v = c.cost + unitCost(n - 1, c.t, t1);
+    const v = c.cost + unitCost(n - 1, c, end);
     if (v < best) { best = v; bi = j; }
   });
   if (!Number.isFinite(best)) return prop; // terlalu rapat — pakai pembagian proporsional
@@ -106,6 +129,7 @@ export function alignUnits(weights, t0, t1, pauses = [], prior = null) {
   }
   return b;
 }
+const span = (a, b) => b - a;
 
 /**
  * Hitung ulang start/end semua scene dari teksnya terhadap audio (lewat jeda kalimat).
@@ -206,22 +230,42 @@ export function scenesFromTranscript(segments, totalSec, targetSec, pauses = [])
   }));
 }
 
-// Potongan subtitle (±7 kata) dengan timing proporsional di dalam scene.
-// Potongan subtitle tidak melewati akhir kalimat, dan waktunya diselaraskan ke jeda di audio.
+// Pecah kalimat jadi potongan subtitle ≤ maxWords kata, sebisa mungkin di tanda baca (koma dsb.),
+// karena di situlah narator berhenti sejenak. Return: [{ text, soft }] — soft = dipotong di tengah frasa.
+function subtitleChunks(sent, maxWords) {
+  const clauses = sent.split(/(?<=[,;:—–])\s+/).map((c) => c.split(/\s+/).filter(Boolean)).filter((c) => c.length);
+  const out = [];
+  let cur = [];
+  const flush = () => { if (cur.length) out.push({ words: cur, soft: false }); cur = []; };
+  for (const c of clauses) {
+    if (cur.length && cur.length + c.length > maxWords) flush();
+    if (c.length > maxWords) {
+      // klausa panjang: bagi rata supaya tidak ada potongan sisa 1–2 kata
+      const parts = Math.ceil(c.length / maxWords), per = Math.ceil(c.length / parts);
+      for (let i = 0; i < c.length; i += per) out.push({ words: c.slice(i, i + per), soft: i > 0 });
+    } else cur.push(...c);
+  }
+  flush();
+  // potongan 1–2 kata di akhir digabung ke sebelumnya kalau masih muat
+  const last = out[out.length - 1], prev = out[out.length - 2];
+  if (prev && last.words.length <= 2 && prev.words.length + last.words.length <= maxWords + 2) {
+    prev.words.push(...last.words);
+    out.pop();
+  }
+  return out.map((o) => ({ text: o.words.join(' '), soft: o.soft }));
+}
+
+// Potongan subtitle dengan waktu diselaraskan ke jeda di audio; tidak melewati akhir kalimat.
 export function subtitleCues(scenes, pauses = [], maxWords = 7) {
   const cues = [];
   for (const s of scenes) {
     const chunks = [];
     for (const sent of splitSentences(s.text || '')) {
-      const words = sent.split(/\s+/).filter(Boolean);
-      // bagi rata supaya tidak ada potongan sisa 1–2 kata
-      const parts = Math.ceil(words.length / maxWords);
-      const per = Math.ceil(words.length / parts);
-      for (let i = 0; i < words.length; i += per) chunks.push(words.slice(i, i + per).join(' '));
+      subtitleChunks(sent, maxWords).forEach((c, k) => chunks.push({ ...c, soft: k > 0 && c.soft }));
     }
     if (!chunks.length) continue;
-    const b = alignUnits(chunks.map(spokenWeight), s.start, s.end, pauses);
-    chunks.forEach((text, k) => cues.push({ start: b[k], end: b[k + 1], text }));
+    const b = alignUnits(chunks.map((c) => spokenWeight(c.text)), s.start, s.end, pauses, null, chunks.map((c) => c.soft));
+    chunks.forEach((c, k) => cues.push({ start: b[k], end: b[k + 1], text: c.text }));
   }
   return cues;
 }

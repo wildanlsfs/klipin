@@ -78,6 +78,8 @@ function setProgress(id, pct) {
 }
 
 const currentAudio = () => audioTrim || audioRaw;
+// Naikkan kalau cara menghitung waktu scene/subtitle berubah → proyek lama disinkronkan ulang saat dibuka.
+const SYNC_V = 3;
 
 // Jeda bicara di timeline audio yang dipakai (asli atau hasil potong jeda).
 let pauseMemo = null;
@@ -411,7 +413,7 @@ function resyncScenes(quiet = false) {
     return false;
   }
   retimeScenes(S.scenes, audioLib.duration(a), audioPauses());
-  S.syncV = 2;
+  S.syncV = SYNC_V;
   renderScenes();
   save();
   if (!quiet) toast('Waktu scene & subtitle disinkronkan dengan audio ✓', 'ok');
@@ -498,7 +500,7 @@ async function scenesFromScriptNow(btn) {
   const total = a ? audioLib.duration(a) : (S.script.split(/\s+/).length / (WPM[S.lang] || 135)) * 60;
   if (!a) toast('Belum ada audio — durasi scene diperkirakan dari panjang naskah.');
   S.scenes = scenesFromScript(S.script, total, S.sceneSec, audioPauses());
-  S.syncV = 2;
+  S.syncV = SYNC_V;
   renderScenes();
   await buildPrompts(btn);
 }
@@ -519,7 +521,7 @@ async function scenesFromTranscriptNow(btn) {
   const segs = await llm.transcribe(settings, { chunks: await audioLib.wavChunksForTranscription(a), lang: S.lang });
   if (!segs.length) throw new Error('Transkrip kosong.');
   S.scenes = scenesFromTranscript(segs, audioLib.duration(a), S.sceneSec, audioPauses());
-  S.syncV = 2;
+  S.syncV = SYNC_V;
   renderScenes();
   await buildPrompts(btn);
 }
@@ -1579,7 +1581,7 @@ async function init() {
   updateStatusLine();
   go(S.step || 1);
   // proyek lama: waktu scene dibuat dengan cara lama (tidak sinkron) → selaraskan sekali
-  if (S.scenes.length && (audioTrim || audioRaw) && S.syncV !== 2) {
+  if (S.scenes.length && (audioTrim || audioRaw) && S.syncV !== SYNC_V) {
     resyncScenes(true);
     setTimeout(() => toast('Waktu scene disinkronkan ulang dengan audio (versi baru).', 'ok'), 800);
   }
