@@ -180,14 +180,49 @@ async function request(url, opts, label) {
 
 // ---------------------------------------------------------------- teks
 
-async function geminiGenerate(s, body, model = s.gemini.model) {
-  if (!s.gemini.key) throw new Error('Gemini API key belum diisi.');
+// Model Pro tidak tersedia di API key gratis (kuota "limit: 0") → otomatis turun ke model Flash.
+const FREE_FALLBACK = ['gemini-flash-latest', 'gemini-2.5-flash'];
+const blockedModels = new Set(); // model yang kuotanya habis/0 selama panel ini terbuka
+
+const isQuotaErr = (e) => e.status === 429 || /quota|RESOURCE_EXHAUSTED/i.test(e.message);
+
+function friendlyQuota(e, model) {
+  const free = /free_?tier|limit: 0/i.test(e.message);
+  const wait = e.message.match(/retry in ([\d.]+h)?([\d.]+m)?/i);
+  return new Error(free
+    ? `Gemini: kuota gratis model ${model} habis atau tidak tersedia untuk API key gratis. Pilih model Flash di ⚙︎ Pengaturan, aktifkan billing di Google AI Studio, atau tambah provider lain (Groq/OpenRouter).${wait ? ` Coba lagi dalam ${wait[0].replace(/retry in /i, '')}.` : ''}`
+    : `Gemini: batas permintaan tercapai untuk ${model}. Tunggu sebentar lalu coba lagi.`);
+}
+
+async function geminiCall(s, body, model) {
   const res = await request(`${GEMINI_BASE}/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.gemini.key },
     body: JSON.stringify(body),
   }, 'Gemini');
   return res.json();
+}
+
+async function geminiGenerate(s, body, model = s.gemini.model) {
+  if (!s.gemini.key) throw new Error('Gemini API key belum diisi.');
+  const textModel = model === s.gemini.model;
+  const chain = textModel
+    ? [...new Set([model, model.replace(/-pro\b/, '-flash'), ...FREE_FALLBACK])].filter((m) => !blockedModels.has(m))
+    : [model];
+  let first;
+  for (const m of chain.length ? chain : [model]) {
+    try {
+      const j = await geminiCall(s, body, m);
+      if (m !== model) notify(`Kuota Gemini ${model} habis → memakai ${m}`);
+      return j;
+    } catch (e) {
+      first ||= e;
+      // model hasil tebakan yang tidak ada (404) dilewati; selain kuota, error langsung dilaporkan
+      if (!isQuotaErr(e) && !(m !== model && e.status === 404)) throw e;
+      if (textModel && (e.status === 404 || /limit: 0|per day/i.test(e.message))) blockedModels.add(m); // bukan batas per menit
+    }
+  }
+  throw isQuotaErr(first) ? friendlyQuota(first, model) : first;
 }
 
 async function geminiText(s, prompt, json) {
