@@ -24,7 +24,8 @@ export function toast(msg, kind = '') {
 }
 
 export function errMsg(e) {
-  return e?.message || String(e);
+  const msg = e?.message || String(e);
+  return e?.hint ? `${msg} ${e.hint}` : msg;
 }
 
 export function fillSelect(sel, items, value) {

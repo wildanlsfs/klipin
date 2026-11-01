@@ -821,14 +821,26 @@ $('#renderBtn').addEventListener('click', async () => {
     const v = $('#resultVideo');
     v.src = url;
     v.classList.remove('hidden');
-    $('#renderInfo').textContent = `✅ Video jadi dalam ${out.elapsed.toFixed(0)} detik (${fmtTime(out.duration)}, ${out.width}×${out.height}) — tersimpan sebagai "${fileHandle?.name || name}".`;
+    $('#renderInfo').textContent = `✅ Video jadi dalam ${out.elapsed.toFixed(0)} detik (${fmtTime(out.duration)}, ${out.width}×${out.height}${out.encoder === 'software' ? ', encoder software' : ''}) — tersimpan sebagai "${fileHandle?.name || name}".`;
     toast('Render selesai ✓', 'ok');
   } catch (e) {
-    console.error(e);
-    $('#renderInfo').textContent = e.name === 'AbortError' ? 'Render dibatalkan.' : `❌ ${errMsg(e)}`;
-    if (e.name !== 'AbortError') toast(errMsg(e), 'err');
+    if (e.name !== 'AbortError') toast(e.message || errMsg(e), 'err');
   }
 });
+
+// Kotak error render yang jelas: apa masalahnya, apa yang bisa dilakukan, dan detail teknis.
+function showRenderError(e) {
+  const info = $('#renderInfo');
+  if (e.name === 'AbortError') { info.textContent = 'Render dibatalkan.'; return; }
+  const detail = [e.detail, e.name !== 'RenderError' ? `${e.name}: ${e.message}` : ''].filter(Boolean).join(' · ');
+  const known = e.name === 'RenderError';
+  info.replaceChildren(h('div', { class: 'errbox' },
+    h('b', {}, `❌ Render gagal: ${known ? e.message : 'terjadi kesalahan yang tidak terduga.'}`),
+    h('div', {}, e.hint || (known ? '' : 'Coba muat ulang panel Klipin lalu render lagi. Kalau tetap gagal, kirim detail di bawah ini ke pembuat Klipin.')),
+    detail && h('details', {}, h('summary', {}, 'Detail teknis'),
+      h('code', {}, `${detail} · Chrome ${navigator.userAgent.match(/Chrome\/([\d.]+)/)?.[1] || '?'} · ${navigator.platform}`),
+      h('button', { class: 'btn', onclick: (ev) => { navigator.clipboard.writeText(ev.target.previousSibling.textContent); toast('Detail disalin', 'ok'); } }, 'Salin'))));
+}
 
 // Render MP4 (dipakai tombol & AI agent). Tanpa fileHandle → hasilnya blob di memori.
 async function renderVideo(fileHandle = null, onProgress = () => {}) {
@@ -844,10 +856,15 @@ async function renderVideo(fileHandle = null, onProgress = () => {}) {
       fileHandle, signal: renderAbort.signal,
       onProgress: ({ phase, pct, elapsed }) => {
         setProgress('#renderProgress', pct);
-        $('#renderInfo').textContent = `${phase} ${Math.round(pct * 100)}%${elapsed ? ` · ${elapsed.toFixed(0)} detik` : ''}`;
-        onProgress(`${phase} ${Math.round(pct * 100)}%`);
+        const txt = phase === 'Render' ? `Render ${Math.round(pct * 100)}%${elapsed ? ` · ${elapsed.toFixed(0)} detik` : ''}` : phase;
+        $('#renderInfo').textContent = txt;
+        onProgress(txt);
       },
     });
+  } catch (e) {
+    console.error('[Klipin] render', e);
+    showRenderError(e);
+    throw e;
   } finally {
     setProgress('#renderProgress', null);
     btn.disabled = false;

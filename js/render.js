@@ -16,15 +16,37 @@ export function outputSize(ratio, res) {
   return { w: even((short * 16) / 9), h: short };
 }
 
-async function pickVideoConfig(w, h, fps) {
+// Error yang ditampilkan ke pengguna: pesan jelas + saran, detail teknis terpisah.
+export class RenderError extends Error {
+  constructor(message, { hint = '', detail = '', stalled = false } = {}) {
+    super(message);
+    this.name = 'RenderError';
+    this.hint = hint;
+    this.detail = detail;
+    this.stalled = stalled;
+  }
+}
+
+const withTimeout = (promise, ms, onTimeout) => Promise.race([
+  promise,
+  new Promise((_, reject) => setTimeout(() => reject(onTimeout()), ms)),
+]);
+
+async function pickVideoConfig(w, h, fps, hardwareAcceleration = 'no-preference') {
+  if (typeof VideoEncoder === 'undefined') {
+    throw new RenderError('Browser ini tidak bisa membuat video (WebCodecs tidak tersedia).', { hint: 'Pakai Google Chrome versi terbaru di komputer (bukan HP).' });
+  }
   const bitrate = w * h >= 1920 * 1080 ? 8_000_000 : 4_000_000;
   for (const codec of ['avc1.640028', 'avc1.4d0028', 'avc1.42e028', 'avc1.640033']) {
-    const cfg = { codec, width: w, height: h, bitrate, framerate: fps, avc: { format: 'avc' }, latencyMode: 'quality' };
+    const cfg = { codec, width: w, height: h, bitrate, framerate: fps, avc: { format: 'avc' }, latencyMode: 'quality', hardwareAcceleration };
     try {
-      if ((await VideoEncoder.isConfigSupported(cfg)).supported) return cfg;
+      const ok = await withTimeout(VideoEncoder.isConfigSupported(cfg), 10000, () => new Error('timeout'));
+      if (ok.supported) return cfg;
     } catch {}
   }
-  throw new Error('Browser ini tidak mendukung encode H.264 (WebCodecs). Pakai Chrome versi terbaru.');
+  throw new RenderError('Komputer ini tidak bisa meng-encode video H.264.', {
+    hint: 'Update Chrome dan driver kartu grafis, atau coba resolusi 720p.',
+  });
 }
 
 async function pickAudioConfig() {
@@ -41,9 +63,14 @@ async function pickAudioConfig() {
   throw new Error('Browser ini tidak mendukung encode audio AAC/Opus.');
 }
 
-async function loadBitmap(src) {
-  const blob = await (await fetch(src)).blob();
-  return createImageBitmap(blob);
+async function loadBitmap(src, label) {
+  try {
+    return await withTimeout((async () => createImageBitmap(await (await fetch(src)).blob()))(), 20000, () => new Error('timeout'));
+  } catch (e) {
+    throw new RenderError(`Gambar ${label} rusak atau tidak bisa dibaca.`, {
+      hint: `Buka langkah 4, lalu buat ulang (↻) atau upload ulang gambar ${label}.`, detail: e.message,
+    });
+  }
 }
 
 function drawCover(ctx, img, w, h, zoom, panX, panY, alpha) {
@@ -106,32 +133,70 @@ function drawSubtitle(ctx, text, w, h) {
  * @param {object|null} o.audio  { samples, sampleRate }
  * @param {FileSystemFileHandle|null} o.fileHandle  tujuan simpan (null → kembalikan Blob)
  */
+const STALL_MS = 20000; // encoder tidak mengeluarkan apa pun selama ini → dianggap macet
+
 export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtitles, fileHandle, onProgress, signal }) {
   const { w, h } = outputSize(ratio, res);
   const usable = scenes.filter((s) => s.image);
-  if (!usable.length) throw new Error('Belum ada gambar scene.');
+  if (!usable.length) throw new RenderError('Belum ada gambar scene.', { hint: 'Buat gambar dulu di langkah 4.' });
   const total = audio ? audio.samples.length / audio.sampleRate : scenes[scenes.length - 1].end;
 
-  onProgress?.({ phase: 'Memuat gambar…', pct: 0 });
   // Scene tanpa gambar memakai gambar scene sebelumnya/berikutnya terdekat.
   const bitmaps = new Map();
-  for (const s of usable) bitmaps.set(s.i, await loadBitmap(s.image));
-  const nearestWithImage = (idx) => {
-    for (let d = 0; d < scenes.length; d++) {
-      if (scenes[idx - d]?.image) return scenes[idx - d];
-      if (scenes[idx + d]?.image) return scenes[idx + d];
+  try {
+    for (let k = 0; k < usable.length; k++) {
+      if (signal?.aborted) throw new DOMException('Render dibatalkan', 'AbortError');
+      onProgress?.({ phase: `Memuat gambar ${k + 1}/${usable.length}…`, pct: 0 });
+      bitmaps.set(usable[k].i, await loadBitmap(usable[k].image, `scene ${usable[k].i}`));
     }
-  };
-  const timeline = scenes.map((s, idx) => ({ start: s.start, end: s.end, bmp: bitmaps.get(nearestWithImage(idx).i), k: idx }));
-  const cues = subtitles ? subtitleCues(scenes, pauses || (audio ? findPauses(audio) : [])) : [];
+    const nearestWithImage = (idx) => {
+      for (let d = 0; d < scenes.length; d++) {
+        if (scenes[idx - d]?.image) return scenes[idx - d];
+        if (scenes[idx + d]?.image) return scenes[idx + d];
+      }
+    };
+    const timeline = scenes.map((s, idx) => ({ start: s.start, end: s.end, bmp: bitmaps.get(nearestWithImage(idx).i), k: idx }));
+    const cues = subtitles ? subtitleCues(scenes, pauses || (audio ? findPauses(audio) : [])) : [];
+    onProgress?.({ phase: 'Menyiapkan audio…', pct: 0 });
+    const acfg = audio ? await pickAudioConfig() : null;
+    const pcm = acfg ? (await resample(audio, AUDIO_RATE)).samples : null;
+    const job = { w, h, fps, total, timeline, cues, acfg, pcm, fileHandle, onProgress, signal };
 
-  const vcfg = await pickVideoConfig(w, h, fps);
-  const acfg = audio ? await pickAudioConfig() : null;
+    // Encoder hardware (GPU) lebih cepat, tapi di sebagian laptop Windows driver-nya macet/error.
+    // Kalau begitu, ulangi otomatis dengan encoder software.
+    try {
+      return await encodeOnce(job, 'no-preference');
+    } catch (e) {
+      if (e.name === 'AbortError' || !(e.stalled || e.encoder)) throw e;
+      console.warn('[Klipin] encoder hardware gagal, coba software', e);
+      onProgress?.({ phase: 'Encoder GPU bermasalah, mencoba encoder software…', pct: 0 });
+      try {
+        return await encodeOnce(job, 'prefer-software');
+      } catch (e2) {
+        if (e2.name === 'AbortError') throw e2;
+        throw new RenderError(
+          e2.stalled ? 'Proses render macet: encoder video di komputer ini tidak merespons.' : 'Encoder video di komputer ini gagal.',
+          { hint: 'Tutup tab/aplikasi berat lain, update Chrome dan driver kartu grafis, lalu coba resolusi 720p.', detail: `${e.detail || e.message} | ${e2.detail || e2.message}` },
+        );
+      }
+    }
+  } finally {
+    bitmaps.forEach((b) => b.close());
+  }
+}
+
+async function encodeOnce({ w, h, fps, total, timeline, cues, acfg, pcm, fileHandle, onProgress, signal }, hardwareAcceleration) {
+  onProgress?.({ phase: 'Menyiapkan encoder video…', pct: 0 });
+  const vcfg = await pickVideoConfig(w, h, fps, hardwareAcceleration);
 
   let writable = null;
   let target;
   if (fileHandle) {
-    writable = await fileHandle.createWritable();
+    try {
+      writable = await fileHandle.createWritable();
+    } catch (e) {
+      throw new RenderError('Tidak bisa menulis file video ke lokasi yang dipilih.', { hint: 'Pilih folder lain (misalnya Downloads) atau tutup file itu kalau sedang dibuka aplikasi lain.', detail: e.message });
+    }
     target = new FileSystemWritableFileStreamTarget(writable);
   } else {
     target = new ArrayBufferTarget();
@@ -145,14 +210,22 @@ export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtit
   });
 
   let encErr = null;
-  const venc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: (e) => { encErr = e; } });
-  venc.configure(vcfg);
+  let lastOut = performance.now();
+  const fail = (what) => (e) => {
+    encErr ||= Object.assign(new RenderError(`Encoder ${what} error.`, { detail: e?.message || String(e) }), { encoder: true });
+  };
+  const venc = new VideoEncoder({ output: (c, m) => { lastOut = performance.now(); muxer.addVideoChunk(c, m); }, error: fail('video') });
+  try {
+    venc.configure(vcfg);
+  } catch (e) {
+    fail('video')(e);
+    throw encErr;
+  }
 
-  let aenc = null, pcm = null, aPos = 0;
+  let aenc = null, aPos = 0;
   if (acfg) {
-    aenc = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: (e) => { encErr = e; } });
+    aenc = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: fail('audio') });
     aenc.configure(acfg.cfg);
-    pcm = (await resample(audio, AUDIO_RATE)).samples;
   }
   const AUDIO_BLOCK = 4800; // 0.1 s
   const feedAudioUntil = (sec) => {
@@ -173,12 +246,16 @@ export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtit
       aPos += n;
     }
   };
+  const stallErr = () => Object.assign(new RenderError('Encoder video tidak merespons.', {
+    detail: `tidak ada output ${STALL_MS / 1000} detik (${hardwareAcceleration})`, stalled: true,
+  }), { stalled: true });
 
   const canvas = new OffscreenCanvas(w, h);
   // Smoothing default (bilinear) sengaja dipakai: 'high' memotong kecepatan render ±50%.
   const ctx = canvas.getContext('2d', { alpha: false });
   const nFrames = Math.ceil(total * fps);
   const t0 = performance.now();
+  lastOut = t0;
   let si = 0, ci = 0;
 
   try {
@@ -213,6 +290,8 @@ export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtit
       frame.close();
 
       while (venc.encodeQueueSize > 6 && !encErr) {
+        if (signal?.aborted) throw new DOMException('Render dibatalkan', 'AbortError');
+        if (performance.now() - lastOut > STALL_MS) throw stallErr();
         await new Promise((r) => {
           venc.addEventListener('dequeue', r, { once: true });
           setTimeout(r, 200);
@@ -224,8 +303,9 @@ export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtit
       }
     }
     feedAudioUntil(Infinity);
-    await venc.flush();
-    if (aenc) await aenc.flush();
+    onProgress?.({ phase: 'Menyelesaikan file…', pct: 1 });
+    await withTimeout(venc.flush(), STALL_MS * 2, stallErr);
+    if (aenc) await withTimeout(aenc.flush(), STALL_MS, stallErr);
     if (encErr) throw encErr;
     muxer.finalize();
     if (writable) await writable.close();
@@ -233,8 +313,6 @@ export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtit
     try { venc.close(); aenc?.close(); } catch {}
     if (writable) await writable.abort().catch(() => {});
     throw e;
-  } finally {
-    bitmaps.forEach((b) => b.close());
   }
 
   const elapsed = (performance.now() - t0) / 1000;
@@ -244,6 +322,7 @@ export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtit
     width: w,
     height: h,
     duration: total,
+    encoder: hardwareAcceleration === 'prefer-software' ? 'software' : 'hardware',
     blob: fileHandle ? null : new Blob([target.buffer], { type: 'video/mp4' }),
   };
 }
