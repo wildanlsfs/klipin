@@ -63,6 +63,15 @@ async function trustedClick(tabId, x, y, attempt = 1) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === 'TUYUL_DEBUG_ATTACH' && sender.tab?.id) {
+    // Pasang debugger SEBELUM posisi tombol diukur: bilah "sedang men-debug" yang muncul
+    // saat pertama dipasang memperkecil halaman dan menggeser tombol kirim.
+    const fresh = !attached.has(sender.tab.id);
+    ensureAttached(sender.tab.id)
+      .then(() => sendResponse({ ok: true, fresh }))
+      .catch((e) => sendResponse({ ok: false, error: e.message }));
+    return true;
+  }
   if (msg?.type !== 'TUYUL_TRUSTED_CLICK' || !sender.tab?.id) return false;
   trustedClick(sender.tab.id, msg.x, msg.y, msg.attempt)
     .then(() => sendResponse({ ok: true }))

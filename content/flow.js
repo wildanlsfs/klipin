@@ -88,6 +88,9 @@
   // Flow hanya menanggapi klik asli dari pengguna (event.isTrusted), jadi minta background mengklik
   // lewat debugger Chrome. Kalau tidak bisa (izin/versi lama), pakai klik biasa.
   async function clickReal(btn, attempt) {
+    const att = await chrome.runtime.sendMessage({ type: 'TUYUL_DEBUG_ATTACH' }).catch(() => null);
+    if (att?.fresh) await sleep(700); // tunggu halaman menyesuaikan diri dengan bilah debugger
+    if (!btn.isConnected) btn = findSubmit(findInput()) || btn;
     btn.scrollIntoView({ block: 'nearest' });
     const r = btn.getBoundingClientRect();
     const res = await chrome.runtime.sendMessage({
