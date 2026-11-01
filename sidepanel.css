@@ -253,3 +253,10 @@ code { background: var(--panel-2); padding: 1px 4px; border-radius: 4px; font-si
 .errbox b { color: #fff; }
 .errbox details summary { cursor: pointer; color: var(--muted); }
 .errbox code { display: block; margin: 6px 0; font-size: 11px; word-break: break-word; white-space: pre-wrap; color: #fca5a5; }
+
+.update { margin: 8px 12px 0; padding: 10px 12px; border-radius: 10px; background: #13261a; border: 1px solid #2f6b45; color: #d1fae5; font-size: 12px; line-height: 1.45; display: grid; gap: 8px; }
+.update .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.update ol { margin: 0; padding-left: 18px; }
+.update .x { margin-left: auto; background: none; border: 0; color: inherit; cursor: pointer; font-size: 14px; }
+.ver { background: none; border: 0; padding: 0 2px; color: var(--muted); font-size: 10.5px; font-weight: 500; cursor: pointer; }
+.ver:hover { color: inherit; text-decoration: underline; }

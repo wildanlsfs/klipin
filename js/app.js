@@ -8,6 +8,7 @@ import { scenesFromScript, scenesFromTranscript, retimeScenes, fmtTime } from '.
 import { renderMp4, outputSize } from './render.js';
 import { kvGet, kvSet, kvDel } from './store.js';
 import { h, toast, errMsg, fillSelect } from './dom.js';
+import { checkUpdate, downloadUpdate } from './update.js';
 import { mountSettings } from './settings-ui.js';
 import { startAgentBridge } from './agent.js';
 
@@ -1467,6 +1468,46 @@ const agentBridge = startAgentBridge(agentTools, (state, info) => {
   $('#agentHint').textContent = AGENT_STATES[state][1];
 });
 // dinyalakan di akhir init(), setelah proyek tersimpan selesai dimuat
+// ---------------------------------------------------------------- update
+
+async function showUpdate(force = false) {
+  const bar = $('#updateBar');
+  let u;
+  try {
+    const self = await chrome.management?.getSelf?.().catch(() => null);
+    if (self && self.installType !== 'development') return; // dari Chrome Web Store → update otomatis oleh Chrome
+    u = await checkUpdate({ force });
+  } catch (e) {
+    if (force) toast(`Gagal cek update: ${errMsg(e)}`, 'err');
+    return;
+  }
+  if (!u) { if (force) toast(`Klipin sudah versi terbaru (${chrome.runtime.getManifest().version}) ✓`, 'ok'); return; }
+  const { updSkip } = await chrome.storage.local.get('updSkip');
+  if (!force && updSkip === u.version) return;
+  const steps = h('ol', { class: 'hidden' },
+    h('li', {}, 'Buka file ZIP yang baru diunduh (folder Downloads/Klipin), lalu ekstrak.'),
+    h('li', {}, 'Salin semua isi folder "klipin" hasil ekstrak ke folder Klipin lama-mu. Pilih "Ganti/Replace" untuk semua file.'),
+    h('li', {}, 'Klik "Muat ulang Klipin" di bawah. Kalau Chrome meminta izin baru, klik Izinkan.'));
+  bar.replaceChildren(
+    h('div', { class: 'row' }, h('b', {}, `🔔 Klipin ${u.version} tersedia`), h('span', {}, `(kamu: ${u.current})`),
+      h('button', { class: 'x', title: 'Ingatkan lagi saat ada versi berikutnya', onclick: () => { chrome.storage.local.set({ updSkip: u.version }); bar.classList.add('hidden'); } }, '✕')),
+    h('div', { class: 'row' },
+      h('button', { class: 'btn primary', onclick: async () => {
+        try {
+          const id = await downloadUpdate(u);
+          steps.classList.remove('hidden');
+          toast('ZIP update sedang diunduh ✓', 'ok');
+          chrome.downloads.onChanged.addListener(function done(d) {
+            if (d.id === id && d.state?.current === 'complete') { chrome.downloads.onChanged.removeListener(done); chrome.downloads.show(id); }
+          });
+        } catch (e) { toast(`Gagal mengunduh: ${errMsg(e)}`, 'err'); }
+      } }, '⬇ Download update'),
+      h('button', { class: 'btn', onclick: () => chrome.tabs.create({ url: u.page }) }, 'Apa yang baru?'),
+      h('button', { class: 'btn', title: 'Pakai setelah file lama ditimpa', onclick: () => chrome.runtime.reload() }, '↻ Muat ulang Klipin')),
+    steps);
+  bar.classList.remove('hidden');
+}
+
 async function startAgent() {
   const { agentBridge: on = true } = await chrome.storage.local.get('agentBridge');
   $('#agentToggle').checked = on;
@@ -1544,6 +1585,9 @@ async function init() {
   }
   if (!llm.providers(settings).some((p) => p.ready)) openSettings();
   startAgent();
+  $('#verBtn').textContent = `v${chrome.runtime.getManifest().version}`;
+  $('#verBtn').addEventListener('click', () => showUpdate(true));
+  showUpdate();
 }
 
 init();
