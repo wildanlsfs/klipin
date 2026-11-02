@@ -340,11 +340,12 @@ Target durasi: ±${minutes} menit (≈${words} kata, toleransi ±10%)
 Bahasa: ${lang === 'en' ? 'English' : 'Bahasa Indonesia yang natural (bukan terjemahan kaku)'}
 
 Aturan:
-- Buka dengan hook kuat di 2 kalimat pertama (pertanyaan atau fakta mengejutkan).
+- Kalimat PERTAMA (≤3 detik, maks ±10 kata) langsung ke inti: klaim tajam, kontras, atau angka mengejutkan tentang topik. Tanpa salam, tanpa pengantar ("Pernahkah kamu…", "Di video ini…"), tanpa menjelaskan latar dulu. Kalimat kedua memberi alasan untuk terus menonton (janji jawaban/akibat).
+- Di tengah video (sekitar 40–60% durasi), sisipkan SATU pertanyaan singkat yang mengajak penonton memilih/berpendapat di komentar, terkait langsung dengan bagian yang sedang dibahas (contoh: "Kamu tim A atau tim B? Tulis di komentar."). Setelah itu lanjutkan isi seperti biasa.
 - Hanya teks yang dibacakan narator. TANPA judul bagian, label adegan, instruksi visual, tanda kurung, emoji, markdown, atau nomor.
 - Paragraf pendek (2–4 kalimat), dipisah baris kosong. Kalimat tidak terlalu panjang supaya enak dibacakan TTS.
 - Fakta harus akurat; jika ada yang belum pasti, sebutkan sebagai dugaan/teori.
-- Tutup dengan kesimpulan singkat dan ajakan halus untuk subscribe/komentar.`)).trim()
+- Tutup dengan kesimpulan singkat dan ajakan singkat untuk subscribe (1 kalimat).`)).trim()
     .replace(/^\s*[#*].*$/gm, '').replace(/\*\*/g, '').replace(/\n{3,}/g, '\n\n').trim();
 }
 
@@ -359,6 +360,7 @@ ${characterNote ? `Konsistensi karakter/tempat: ${characterNote}` : ''}
 Aturan prompt:
 - 1–3 kalimat, deskripsikan subjek, aksi, latar, komposisi kamera, dan suasana yang MENGGAMBARKAN isi narasi.
 - Selalu awali dengan deskripsi gaya visual di atas agar konsisten.
+- Scene 1 adalah hook: buat gambar paling mencolok yang langsung MEMPERLIHATKAN kontras/klaim di narasinya (mis. dua pilihan berdampingan, sebelum–sesudah, perbandingan besar–kecil), bukan suasana pembuka.
 - Tanpa teks/tulisan/huruf/watermark di gambar. Hindari tokoh nyata yang dikenali, kekerasan grafis, dan konten sensitif.
 
 Scene:
