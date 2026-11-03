@@ -343,10 +343,11 @@ Aturan:
 - Kalimat PERTAMA (≤3 detik, maks ±10 kata) langsung ke inti: klaim tajam, kontras, atau angka mengejutkan tentang topik. Tanpa salam, tanpa pengantar ("Pernahkah kamu…", "Di video ini…"), tanpa menjelaskan latar dulu. Kalimat kedua memberi alasan untuk terus menonton (janji jawaban/akibat).
 - Dalam 10 detik pertama (±3 kalimat) sudah muncul angka/kontras inti yang konkret (contoh: margin A vs margin B). JANGAN membuka dengan simulasi panjang ("Misalnya kamu beli 10 kg…", "Bayangkan…"). Hitungan atau contoh baru boleh SETELAH kontras inti disebut, dan dibuat ringkas.
 - Di sepertiga awal video (sekitar 25–40% durasi), sisipkan SATU pertanyaan komentar berupa dilema spesifik dari pengalaman penonton, terkait langsung dengan bagian yang sedang dibahas (contoh: "Pernah hitung susut bobot waktu bikin fillet? Berapa persen? Tulis di komentar."). Hindari ajakan umum seperti "Bagaimana pendapatmu?". Setelah itu lanjutkan isi seperti biasa.
+- Setiap 1–2 kalimat harus memberi informasi baru (fakta, angka, akibat, atau perbandingan). Tanpa kalimat pengisi, pengulangan, atau basa-basi transisi ("Nah, sekarang kita bahas…").
 - Hanya teks yang dibacakan narator. TANPA judul bagian, label adegan, instruksi visual, tanda kurung, emoji, markdown, atau nomor.
 - Paragraf pendek (2–4 kalimat), dipisah baris kosong. Kalimat tidak terlalu panjang supaya enak dibacakan TTS.
 - Fakta harus akurat; jika ada yang belum pasti, sebutkan sebagai dugaan/teori.
-- Tutup dengan kesimpulan singkat, lalu 1 kalimat ajakan: kirim video ini ke orang spesifik yang butuh (contoh: "Kirim ke teman yang lagi mulai ternak.") atau subscribe.`)).trim()
+- Penutup: kesimpulan singkat, lalu 1 kalimat ajakan (kirim video ini ke orang spesifik yang butuh, contoh: "Kirim ke teman yang lagi mulai ternak.", atau subscribe), lalu SATU kalimat terakhir yang pendek dan nyambung ke kalimat pertama (mengulang kata kunci atau pertanyaan pembuka), supaya video terasa mulus saat terputar ulang (loop).`)).trim()
     .replace(/^\s*[#*].*$/gm, '').replace(/\*\*/g, '').replace(/\n{3,}/g, '\n\n').trim();
 }
 
