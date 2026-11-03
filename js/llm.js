@@ -5,6 +5,7 @@
 // - Transkrip: Gemini (audio inline) atau Whisper-compatible (/audio/transcriptions)
 
 import { decodeFile } from './audio.js';
+import { VISUAL_STYLES } from './data.js';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const ELEVEN_BASE = 'https://api.elevenlabs.io/v1';
@@ -52,7 +53,70 @@ export const DEFAULT_SETTINGS = {
   eleven: { key: '', model: 'eleven_multilingual_v2' },
   tasks: { title: 'gemini', script: 'gemini', scene: 'gemini', transcribe: 'gemini', youtube: 'gemini' },
   fallback: true,
+  rules: {}, // { script: [{ id, on, text, label? }], scene: [...] } — hanya yang diubah/ditambah pengguna
+  styleOverrides: {}, // { <id gaya bawaan>: prompt pengganti }
+  customStyles: [], // [{ id, label, emoji, prompt }]
 };
+
+// Aturan prompt bawaan. Pengguna bisa mematikan, mengubah teks, atau menambah aturan sendiri
+// (⚙︎ Pengaturan → Aturan prompt); yang tidak diubah tetap mengikuti teks bawaan versi terbaru.
+export const DEFAULT_RULES = {
+  script: [
+    { id: 'hook', label: 'Pembuka 3 detik', text: 'Kalimat PERTAMA (≤3 detik, maks ±10 kata) langsung ke inti: klaim tajam, kontras, atau angka mengejutkan tentang topik. Tanpa salam, tanpa pengantar ("Pernahkah kamu…", "Di video ini…"), tanpa menjelaskan latar dulu. Kalimat kedua memberi alasan untuk terus menonton (janji jawaban/akibat).' },
+    { id: 'core10', label: 'Inti dalam 10 detik', text: 'Dalam 10 detik pertama (±3 kalimat) sudah muncul angka/kontras inti yang konkret (contoh: margin A vs margin B). JANGAN membuka dengan simulasi panjang ("Misalnya kamu beli 10 kg…", "Bayangkan…"). Hitungan atau contoh baru boleh SETELAH kontras inti disebut, dan dibuat ringkas.' },
+    { id: 'comment', label: 'Pertanyaan komentar', text: 'Di sepertiga awal video (sekitar 25–40% durasi), sisipkan SATU pertanyaan komentar berupa dilema spesifik dari pengalaman penonton, terkait langsung dengan bagian yang sedang dibahas (contoh: "Pernah hitung susut bobot waktu bikin fillet? Berapa persen? Tulis di komentar."). Hindari ajakan umum seperti "Bagaimana pendapatmu?". Setelah itu lanjutkan isi seperti biasa.' },
+    { id: 'density', label: 'Padat informasi', text: 'Setiap 1–2 kalimat harus memberi informasi baru (fakta, angka, akibat, atau perbandingan). Tanpa kalimat pengisi, pengulangan, atau basa-basi transisi ("Nah, sekarang kita bahas…").' },
+    { id: 'narration', label: 'Hanya narasi', text: 'Hanya teks yang dibacakan narator. TANPA judul bagian, label adegan, instruksi visual, tanda kurung, emoji, markdown, atau nomor.' },
+    { id: 'tts', label: 'Enak dibacakan TTS', text: 'Paragraf pendek (2–4 kalimat), dipisah baris kosong. Kalimat tidak terlalu panjang supaya enak dibacakan TTS.' },
+    { id: 'facts', label: 'Fakta akurat', text: 'Fakta harus akurat; jika ada yang belum pasti, sebutkan sebagai dugaan/teori.' },
+    { id: 'cta', label: 'Ajakan di penutup', text: 'Penutup: kesimpulan singkat, lalu 1 kalimat ajakan (kirim video ini ke orang spesifik yang butuh, contoh: "Kirim ke teman yang lagi mulai ternak.", atau subscribe).' },
+    { id: 'loop', label: 'Loop ke pembuka', text: 'Kalimat paling akhir (setelah ajakan) pendek dan nyambung ke kalimat pertama (mengulang kata kunci atau pertanyaan pembuka), supaya video terasa mulus saat terputar ulang.' },
+  ],
+  scene: [
+    { id: 'describe', label: 'Isi prompt', text: '1–3 kalimat, deskripsikan subjek, aksi, latar, komposisi kamera, dan suasana yang MENGGAMBARKAN isi narasi.' },
+    { id: 'stylefirst', label: 'Gaya di depan', text: 'Selalu awali dengan deskripsi gaya visual di atas agar konsisten.' },
+    { id: 'hookimg', label: 'Scene 1 = hook', text: 'Scene 1 adalah hook: buat gambar paling mencolok yang langsung MEMPERLIHATKAN kontras/klaim di narasinya (mis. dua pilihan berdampingan, sebelum–sesudah, perbandingan besar–kecil), bukan suasana pembuka.' },
+    { id: 'safe', label: 'Tanpa teks & aman', text: 'Tanpa teks/tulisan/huruf/watermark di gambar. Hindari tokoh nyata yang dikenali, kekerasan grafis, dan konten sensitif.' },
+  ],
+};
+
+// Daftar aturan efektif: bawaan (dengan perubahan pengguna) lalu aturan tambahan pengguna.
+export function rulesFor(s, kind) {
+  const defs = DEFAULT_RULES[kind] || [];
+  const user = s.rules?.[kind] || [];
+  const byId = new Map(user.map((r) => [r.id, r]));
+  return [
+    ...defs.map((d) => {
+      const u = byId.get(d.id) || {};
+      return { ...d, builtin: true, on: u.on !== false, text: u.text ?? d.text };
+    }),
+    ...user.filter((r) => !defs.some((d) => d.id === r.id)).map((r) => ({ label: '', ...r, builtin: false, on: r.on !== false })),
+  ];
+}
+
+// Simpan hanya selisih dari bawaan, supaya perbaikan aturan bawaan di versi baru tetap sampai ke pengguna.
+export function compactRules(kind, list) {
+  const defs = new Map((DEFAULT_RULES[kind] || []).map((d) => [d.id, d]));
+  return list.flatMap((r) => {
+    const d = defs.get(r.id);
+    if (!d) return r.text.trim() ? [{ id: r.id, label: r.label || '', on: r.on, text: r.text.trim() }] : [];
+    const text = r.text.trim();
+    const diff = { id: r.id };
+    if (!r.on) diff.on = false;
+    if (text && text !== d.text) diff.text = text;
+    return Object.keys(diff).length > 1 ? [diff] : [];
+  });
+}
+
+// Gaya visual efektif: bawaan (prompt bisa diganti pengguna) + gaya buatan pengguna.
+export function visualStyles(s) {
+  return [
+    ...VISUAL_STYLES.map((v) => ({ ...v, builtin: true, prompt: s.styleOverrides?.[v.id] || v.prompt })),
+    ...(s.customStyles || []).filter((v) => v.prompt?.trim()).map((v) => ({ emoji: '🖌️', ...v, builtin: false })),
+  ];
+}
+
+const ruleLines = (s, kind) => rulesFor(s, kind).filter((r) => r.on && r.text.trim()).map((r) => `- ${r.text.trim()}`).join('\n');
 
 export const OPENAI_VOICES = [
   { id: 'onyx', name: 'Onyx', gender: 'L', desc: 'Dalam, berwibawa' },
@@ -340,14 +404,7 @@ Target durasi: ±${minutes} menit (≈${words} kata, toleransi ±10%)
 Bahasa: ${lang === 'en' ? 'English' : 'Bahasa Indonesia yang natural (bukan terjemahan kaku)'}
 
 Aturan:
-- Kalimat PERTAMA (≤3 detik, maks ±10 kata) langsung ke inti: klaim tajam, kontras, atau angka mengejutkan tentang topik. Tanpa salam, tanpa pengantar ("Pernahkah kamu…", "Di video ini…"), tanpa menjelaskan latar dulu. Kalimat kedua memberi alasan untuk terus menonton (janji jawaban/akibat).
-- Dalam 10 detik pertama (±3 kalimat) sudah muncul angka/kontras inti yang konkret (contoh: margin A vs margin B). JANGAN membuka dengan simulasi panjang ("Misalnya kamu beli 10 kg…", "Bayangkan…"). Hitungan atau contoh baru boleh SETELAH kontras inti disebut, dan dibuat ringkas.
-- Di sepertiga awal video (sekitar 25–40% durasi), sisipkan SATU pertanyaan komentar berupa dilema spesifik dari pengalaman penonton, terkait langsung dengan bagian yang sedang dibahas (contoh: "Pernah hitung susut bobot waktu bikin fillet? Berapa persen? Tulis di komentar."). Hindari ajakan umum seperti "Bagaimana pendapatmu?". Setelah itu lanjutkan isi seperti biasa.
-- Setiap 1–2 kalimat harus memberi informasi baru (fakta, angka, akibat, atau perbandingan). Tanpa kalimat pengisi, pengulangan, atau basa-basi transisi ("Nah, sekarang kita bahas…").
-- Hanya teks yang dibacakan narator. TANPA judul bagian, label adegan, instruksi visual, tanda kurung, emoji, markdown, atau nomor.
-- Paragraf pendek (2–4 kalimat), dipisah baris kosong. Kalimat tidak terlalu panjang supaya enak dibacakan TTS.
-- Fakta harus akurat; jika ada yang belum pasti, sebutkan sebagai dugaan/teori.
-- Penutup: kesimpulan singkat, lalu 1 kalimat ajakan (kirim video ini ke orang spesifik yang butuh, contoh: "Kirim ke teman yang lagi mulai ternak.", atau subscribe), lalu SATU kalimat terakhir yang pendek dan nyambung ke kalimat pertama (mengulang kata kunci atau pertanyaan pembuka), supaya video terasa mulus saat terputar ulang (loop).`)).trim()
+${ruleLines(s, 'script')}`)).trim()
     .replace(/^\s*[#*].*$/gm, '').replace(/\*\*/g, '').replace(/\n{3,}/g, '\n\n').trim();
 }
 
@@ -360,10 +417,7 @@ Gaya visual WAJIB (sama di semua scene): ${visualStyle.prompt}
 ${characterNote ? `Konsistensi karakter/tempat: ${characterNote}` : ''}
 
 Aturan prompt:
-- 1–3 kalimat, deskripsikan subjek, aksi, latar, komposisi kamera, dan suasana yang MENGGAMBARKAN isi narasi.
-- Selalu awali dengan deskripsi gaya visual di atas agar konsisten.
-- Scene 1 adalah hook: buat gambar paling mencolok yang langsung MEMPERLIHATKAN kontras/klaim di narasinya (mis. dua pilihan berdampingan, sebelum–sesudah, perbandingan besar–kecil), bukan suasana pembuka.
-- Tanpa teks/tulisan/huruf/watermark di gambar. Hindari tokoh nyata yang dikenali, kekerasan grafis, dan konten sensitif.
+${ruleLines(s, 'scene')}
 
 Scene:
 ${list}

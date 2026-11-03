@@ -1,5 +1,5 @@
 import {
-  IDEA_BANK, FORMATS, NARRATION_STYLES, DURATIONS, WPM, VISUAL_STYLES, RATIOS, VOICES,
+  IDEA_BANK, FORMATS, NARRATION_STYLES, DURATIONS, WPM, RATIOS, VOICES,
   AI_STUDIO_TTS_URL, FLOW_URL,
 } from './data.js';
 import * as llm from './llm.js';
@@ -97,7 +97,7 @@ function audioPauses() {
 }
 const fmtStyle = () => FORMATS.find((f) => f.id === S.format) || FORMATS[0];
 const narrStyle = () => NARRATION_STYLES.find((n) => n.id === S.narrStyle) || NARRATION_STYLES[0];
-const visualStyle = () => VISUAL_STYLES.find((v) => v.id === S.visualStyle) || VISUAL_STYLES[0];
+const visualStyle = () => { const all = llm.visualStyles(settings); return all.find((v) => v.id === S.visualStyle) || all[0]; };
 
 // ---------------------------------------------------------------- navigation
 
@@ -377,7 +377,7 @@ async function loadAudioFile(file) {
 // ---------------------------------------------------------------- step 3: visual, potong jeda, scene
 
 function renderVisualStyles() {
-  $('#visualStyles').replaceChildren(...VISUAL_STYLES.map((v) =>
+  $('#visualStyles').replaceChildren(...llm.visualStyles(settings).map((v) =>
     h('button', {
       class: `style ${S.visualStyle === v.id ? 'active' : ''}`,
       onclick: () => { S.visualStyle = v.id; renderVisualStyles(); save(); },
@@ -1177,6 +1177,7 @@ function applySettings(next) {
   elevenCache = null;
   updateStatusLine();
   renderTtsEngines(true);
+  renderVisualStyles(); // gaya visual buatan pengguna
 }
 
 const settingsUI = mountSettings($('#settingsRoot'), {
@@ -1272,7 +1273,7 @@ const agentTools = {
       text: [
         `format: ${FORMATS.map((f) => `${f.id} (${f.label})`).join(', ')}`,
         `narration_style: ${NARRATION_STYLES.map((n) => `${n.id} (${n.label})`).join(', ')}`,
-        `visual_style: ${VISUAL_STYLES.map((v) => `${v.id} (${v.label})`).join(', ')}`,
+        `visual_style: ${llm.visualStyles(settings).map((v) => `${v.id} (${v.label})`).join(', ')}`,
         `ratio: ${RATIOS.map((r) => r.id).join(', ')}`,
         `minutes: ${DURATIONS.join(', ')}`,
         `TTS engine: ${ttsLines.join(', ')}`,
@@ -1367,7 +1368,7 @@ const agentTools = {
 
   async scenes({ visual_style, ratio, scene_seconds, source }, progress) {
     go(3);
-    S.visualStyle = pickId(VISUAL_STYLES, visual_style, 'visual_style') || S.visualStyle;
+    S.visualStyle = pickId(llm.visualStyles(settings), visual_style, 'visual_style') || S.visualStyle;
     if (ratio) S.ratio = pickId(RATIOS, ratio, 'ratio');
     if (scene_seconds) S.sceneSec = Math.max(3, Math.min(20, Number(scene_seconds)));
     initUI();

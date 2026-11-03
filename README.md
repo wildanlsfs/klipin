@@ -59,6 +59,12 @@ API key tetap di extension dan tidak dikirim ke agent. Matikan kapan saja lewat 
   (daftar suara diambil dari akunmu). TTS tidak memakai cadangan otomatis supaya suara narator tidak berganti di tengah video.
 - Ollama: jalankan dengan `OLLAMA_ORIGINS="chrome-extension://*"`.
 
+## Aturan prompt & gaya visual (⚙︎ → ✍️ Aturan prompt / 🎨 Gaya visual)
+- **Aturan naskah** (pembuka 3 detik, inti dalam 10 detik, pertanyaan komentar, padat informasi, ajakan penutup, loop, dll.)
+  dan **aturan prompt gambar** bisa dimatikan, diubah teksnya, atau ditambah aturan sendiri.
+- **Gaya visual:** prompt gaya bawaan bisa diganti, dan kamu bisa menambah gaya sendiri (muncul di pilihan langkah 3 dan di `klipin_options`).
+- ↺ mengembalikan teks bawaan. Aturan bawaan yang tidak kamu ubah ikut diperbarui saat Klipin update.
+
 ## Alur
 1. **Judul** – ketik ide / pilih dari 100 ide → *Kembangkan Judul* (atau pakai judul sendiri).
 2. **Naskah** – pilih format, gaya narasi, durasi, bahasa → *Tulis Naskah*.

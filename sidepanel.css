@@ -97,6 +97,11 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; margin: 12px 0; }
 details.card summary { cursor: pointer; font-weight: 700; }
 details.card[open] summary { margin-bottom: 8px; }
+.rule { border-top: 1px solid var(--line); padding: 8px 0; }
+.rule:first-child { border-top: 0; padding-top: 0; }
+.rule textarea { font-size: 12px; margin-top: 6px; }
+.rule .prov-head input[type=checkbox] { flex: none; accent-color: var(--accent); }
+.rule .prov-head input.emoji { flex: none; width: 3em; text-align: center; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip {

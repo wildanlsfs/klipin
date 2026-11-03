@@ -3,6 +3,7 @@
 
 import * as llm from './llm.js';
 import { h, toast, errMsg, fillSelect } from './dom.js';
+import { VISUAL_STYLES } from './data.js';
 
 const modelCache = new Map(); // target → daftar model (bertahan selama halaman terbuka)
 
@@ -28,6 +29,8 @@ function requestOrigins(bases) {
  */
 export function mountSettings(root, { onSaved, onCancel } = {}) {
   let draft = null; // salinan pengaturan yang sedang diedit
+  let rules = null; // { script: [...], scene: [...] } daftar aturan efektif yang sedang diedit
+  let styles = null; // gaya visual efektif yang sedang diedit
 
   const taskMap = h('div', { class: 'task-map' });
   const fallback = h('input', { type: 'checkbox', onchange: (e) => { draft.fallback = e.target.checked; } });
@@ -39,6 +42,8 @@ export function mountSettings(root, { onSaved, onCancel } = {}) {
     onchange: () => reloadModels('eleven'),
   });
   const elevenBox = h('div', {});
+  const ruleBoxes = { script: h('div', {}), scene: h('div', {}) };
+  const styleBox = h('div', {});
 
   root.replaceChildren(
     h('div', { class: 'card' },
@@ -55,6 +60,16 @@ export function mountSettings(root, { onSaved, onCancel } = {}) {
       h('label', {}, 'API key ', h('a', { href: 'https://elevenlabs.io/app/settings/api-keys', target: '_blank' }, 'ambil ↗')),
       elevenKey,
       elevenBox),
+    h('h3', { class: 'sec' }, '✍️ Aturan prompt'),
+    h('p', { class: 'hint' }, 'Aturan yang dikirim ke AI saat menulis naskah dan prompt gambar. Matikan, ubah teksnya, atau tambah aturan sendiri. Aturan bawaan yang tidak kamu ubah ikut diperbarui saat Klipin update.'),
+    rulesCard('script', '📝 Naskah'),
+    rulesCard('scene', '🖼️ Prompt gambar (scene)'),
+    h('h3', { class: 'sec' }, '🎨 Gaya visual'),
+    h('details', { class: 'card' },
+      h('summary', {}, 'Prompt gaya visual'),
+      h('p', { class: 'hint' }, 'Deskripsi gaya ini ditaruh di depan setiap prompt gambar. Ubah gaya bawaan atau tambah gaya sendiri; gaya baru muncul di pilihan langkah 3.'),
+      styleBox,
+      h('button', { class: 'btn', onclick: addStyle }, '＋ Tambah gaya')),
     h('div', { class: 'row sticky-actions' },
       h('button', { class: 'btn', onclick: () => onCancel?.() }, 'Batal'),
       h('button', { class: 'btn primary', onclick: save }, 'Simpan')),
@@ -165,6 +180,67 @@ export function mountSettings(root, { onSaved, onCancel } = {}) {
     return card;
   }
 
+  function rulesCard(kind, title) {
+    return h('details', { class: 'card' },
+      h('summary', {}, title),
+      ruleBoxes[kind],
+      h('div', { class: 'row' },
+        h('button', { class: 'btn', onclick: () => { rules[kind].push({ id: `u_${Date.now().toString(36)}`, label: '', text: '', on: true, builtin: false }); renderRules(kind); } }, '＋ Tambah aturan'),
+        h('button', { class: 'btn', onclick: () => { rules[kind] = llm.rulesFor({}, kind); renderRules(kind); } }, '↺ Kembalikan bawaan')));
+  }
+
+  function renderRules(kind) {
+    const defs = new Map(llm.DEFAULT_RULES[kind].map((d) => [d.id, d.text]));
+    ruleBoxes[kind].replaceChildren(...rules[kind].map((r) => {
+      const text = h('textarea', { rows: 3, placeholder: 'Tulis aturannya…', oninput: (e) => { r.text = e.target.value; } }, r.text);
+      return h('div', { class: 'rule' },
+        h('div', { class: 'prov-head' },
+          h('input', { type: 'checkbox', title: 'Pakai aturan ini', checked: r.on, onchange: (e) => { r.on = e.target.checked; } }),
+          r.builtin
+            ? h('b', { style: 'flex:1' }, r.label)
+            : h('input', { style: 'flex:1', value: r.label, placeholder: 'Nama aturan', oninput: (e) => { r.label = e.target.value; } }),
+          r.builtin
+            ? h('button', { class: 'icon-btn', title: 'Kembalikan teks bawaan', onclick: () => { r.text = defs.get(r.id); text.value = r.text; } }, '↺')
+            : h('button', { class: 'icon-btn', title: 'Hapus aturan', onclick: () => { rules[kind] = rules[kind].filter((x) => x !== r); renderRules(kind); } }, '✕')),
+        text);
+    }));
+  }
+
+  function renderStyles() {
+    const defs = new Map(VISUAL_STYLES.map((v) => [v.id, v.prompt]));
+    styleBox.replaceChildren(...styles.map((v) => {
+      const text = h('textarea', { rows: 3, placeholder: 'Deskripsi gaya dalam Bahasa Inggris…', oninput: (e) => { v.prompt = e.target.value; } }, v.prompt);
+      return h('div', { class: 'rule' },
+        h('div', { class: 'prov-head' },
+          v.builtin
+            ? h('b', { style: 'flex:1' }, `${v.emoji} ${v.label}`)
+            : [h('input', { class: 'emoji', value: v.emoji, title: 'Emoji', oninput: (e) => { v.emoji = e.target.value; } }),
+              h('input', { style: 'flex:1', value: v.label, placeholder: 'Nama gaya', oninput: (e) => { v.label = e.target.value; } })],
+          v.builtin
+            ? h('button', { class: 'icon-btn', title: 'Kembalikan prompt bawaan', onclick: () => { v.prompt = defs.get(v.id); text.value = v.prompt; } }, '↺')
+            : h('button', { class: 'icon-btn', title: 'Hapus gaya', onclick: () => { styles = styles.filter((x) => x !== v); renderStyles(); } }, '✕')),
+        text);
+    }));
+  }
+
+  function addStyle() {
+    styles.push({ id: `gaya_${Date.now().toString(36)}`, emoji: '🖌️', label: '', prompt: '', builtin: false });
+    renderStyles();
+    styleBox.lastElementChild.querySelector('input:not([type=checkbox])')?.focus();
+  }
+
+  // Aturan & gaya yang sedang diedit → bentuk simpanan (hanya selisih dari bawaan).
+  function commitPrompts(next) {
+    next.rules = Object.fromEntries(Object.keys(rules).map((k) => [k, llm.compactRules(k, rules[k])]));
+    const defs = new Map(VISUAL_STYLES.map((v) => [v.id, v.prompt]));
+    next.styleOverrides = Object.fromEntries(styles
+      .filter((v) => v.builtin && v.prompt.trim() && v.prompt.trim() !== defs.get(v.id))
+      .map((v) => [v.id, v.prompt.trim()]));
+    next.customStyles = styles
+      .filter((v) => !v.builtin && v.prompt.trim())
+      .map(({ id, emoji, label, prompt }) => ({ id, emoji: emoji || '🖌️', label: label.trim() || 'Gaya saya', prompt: prompt.trim() }));
+  }
+
   function render() {
     fallback.checked = draft.fallback;
     elevenKey.value = draft.eleven.key;
@@ -172,6 +248,9 @@ export function mountSettings(root, { onSaved, onCancel } = {}) {
       draft.eleven.model = v || llm.DEFAULT_SETTINGS.eleven.model;
     }, 'eleven', 'any'));
     cards.replaceChildren(providerCard('gemini'), ...draft.compat.map(providerCard));
+    renderRules('script');
+    renderRules('scene');
+    renderStyles();
     renderTaskMap();
     autoLoadModels();
   }
@@ -230,6 +309,7 @@ export function mountSettings(root, { onSaved, onCancel } = {}) {
 
   function save() {
     const next = draft;
+    commitPrompts(next);
     for (const c of next.compat) c.name = c.name.trim() || llm.PRESETS[c.preset]?.name || 'Custom';
     requestOrigins(next.compat.map((c) => c.base)).then(async (granted) => {
       await llm.saveSettings(next);
@@ -242,6 +322,8 @@ export function mountSettings(root, { onSaved, onCancel } = {}) {
   return {
     load(settings) {
       draft = structuredClone(settings);
+      rules = { script: llm.rulesFor(draft, 'script'), scene: llm.rulesFor(draft, 'scene') };
+      styles = llm.visualStyles({ ...draft, customStyles: [] }).concat((draft.customStyles || []).map((v) => ({ ...v, builtin: false })));
       fillSelect(addPreset, Object.entries(llm.PRESETS).map(([k, p]) => [k, p.name]), 'openai');
       render();
     },
