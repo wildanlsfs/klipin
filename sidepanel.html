@@ -250,7 +250,7 @@
     <!-- ============ STEP 6: PAKET YOUTUBE ============ -->
     <section class="step" data-step="6">
       <h2>📺 Paket upload YouTube</h2>
-      <p class="hint">Judul, deskripsi (bab/timestamp otomatis dari scene), tag, dan thumbnail 1280×720 untuk proyek ini.</p>
+      <p class="hint">Judul, deskripsi (bab/timestamp otomatis dari scene), tag, dan thumbnail (ukuran mengikuti rasio video) untuk proyek ini.</p>
       <button class="btn primary" id="ytGenBtn">✨ Buat Judul, Deskripsi &amp; Thumbnail</button>
 
       <div id="ytOut" class="hidden">
@@ -277,7 +277,7 @@
         <div class="card">
           <div class="label-row">
             <h3>🖼️ Thumbnail</h3>
-            <span class="meta">1280×720</span>
+            <span class="meta" id="thumbSizeMeta">1280×720</span>
           </div>
           <canvas id="thumbCanvas" width="1280" height="720"></canvas>
 

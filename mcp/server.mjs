@@ -125,13 +125,18 @@ const TOOLS = [
   },
   {
     name: 'klipin_thumbnail',
-    description: 'Compose a 1280x720 YouTube thumbnail (background image + big text), save it as JPG to Downloads/Klipin and return a preview.',
+    description: 'Compose a YouTube thumbnail sized to the project ratio (16:9 → 1280x720, 9:16 → 1080x1920, 1:1 → 1080x1080) (background image + big text), save it as JPG to Downloads/Klipin and return a preview.',
     inputSchema: obj({
       text: str('2–4 word thumbnail text (default: first suggestion from klipin_youtube)'),
       background: str('"scene:N" to use scene N\'s image, "flow" to generate a new background in Google Flow, or omit to keep the current one'),
       position: str('Text position', { enum: ['left', 'right', 'bottom'] }),
       color: str('Text accent color', { enum: ['yellow', 'white', 'red'] }),
     }),
+  },
+  {
+    name: 'klipin_youtube_attach',
+    description: 'Put the last rendered MP4 (kind "video") or thumbnail (kind "image") into the file input of the YouTube Studio tab (studio.youtube.com) — no file size limit. Open the upload dialog (Create → Upload videos) or the thumbnail section first. Klipin does not fill in or publish anything.',
+    inputSchema: obj({ kind: str('"video" (default) or "image"', { enum: ['video', 'image'] }), file: str('Absolute path instead of the last Klipin output') }),
   },
   {
     name: 'klipin_wait',
@@ -234,8 +239,9 @@ function toContent(job) {
 const expandHome = (p) => (p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p);
 const AUDIO_EXT = /\.(wav|mp3|m4a|aac|ogg|oga|flac|webm|opus)$/i;
 
-async function runTool(name, args = {}) {
-  if (!TOOLS.some((t) => t.name === name)) return { content: [{ type: 'text', text: `Tool tidak dikenal: ${name}` }], isError: true };
+// forwarded = dari server Klipin lain (bisa versi lebih baru dengan tool yang belum dikenal di sini)
+async function runTool(name, args = {}, forwarded = false) {
+  if (!TOOLS.some((t) => t.name === name) && !(forwarded && /^klipin_\w+$/.test(name))) return { content: [{ type: 'text', text: `Tool tidak dikenal: ${name}` }], isError: true };
   if (name === 'klipin_wait') {
     const job = jobs.get(String(args.job_id || ''));
     if (!job) return { content: [{ type: 'text', text: 'job_id tidak ditemukan (mungkin sudah kedaluwarsa). Cek klipin_status.' }], isError: true };
@@ -303,7 +309,7 @@ function makeServer(sharedSecret) {
       if (url.pathname === '/hello') return send(res, 200, { klipin: VERSION });
       try {
         const { name, args } = await readBody(req, 200 * 1024 * 1024);
-        return send(res, 200, await runTool(name, args));
+        return send(res, 200, await runTool(name, args, true));
       } catch (e) {
         return send(res, 400, { error: e.message });
       }

@@ -391,7 +391,7 @@ Isi JSON:
 - "tags": 12–20 tag pencarian (gabungan luas & spesifik), tanpa tanda #.
 - "hashtags": 3 hashtag relevan, dengan #.
 - "thumbTexts": 4 teks thumbnail SANGAT pendek (2–4 kata), emosional/penasaran, BUKAN pengulangan judul.
-- "thumbPrompt": prompt gambar thumbnail YouTube rasio 16:9: satu subjek fokus, ekspresi/aksi dramatis, kontras tinggi, warna mencolok, latar sederhana, ruang kosong di sisi kiri untuk teks, tanpa teks/huruf di gambar, tanpa tokoh nyata.${ratio && ratio !== '16:9' ? ' (video aslinya ' + ratio + ', tapi thumbnail tetap 16:9)' : ''}
+- "thumbPrompt": prompt gambar thumbnail YouTube rasio ${ratio || '16:9'}: satu subjek fokus, ekspresi/aksi dramatis, kontras tinggi, warna mencolok, latar sederhana, ruang kosong ${ratio === '9:16' ? 'di bagian atas' : 'di sisi kiri'} untuk teks, tanpa teks/huruf di gambar, tanpa tokoh nyata.
 
 Balas HANYA JSON: {"titles":[],"description":"","chapters":[],"tags":[],"hashtags":[],"thumbTexts":[],"thumbPrompt":""}`,
   (o) => Array.isArray(o.titles) && o.titles.length && typeof o.description === 'string');

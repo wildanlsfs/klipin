@@ -62,7 +62,36 @@ async function trustedClick(tabId, x, y, attempt = 1) {
   scheduleDetach(tabId);
 }
 
+// Isi <input type=file> di tab lain (mis. dialog upload YouTube Studio) dengan file dari komputer ini.
+// Lewat CDP karena script biasa tidak boleh memilih file lokal; tidak ada batas ukuran file.
+async function setFileInput(tabId, files, kind) {
+  await ensureAttached(tabId);
+  const send = (m, p) => chrome.debugger.sendCommand({ tabId }, m, p);
+  // cari input file yang terlihat, termasuk di dalam shadow DOM
+  const expr = `(() => {
+    const out = [];
+    const walk = (root) => root.querySelectorAll('*').forEach((el) => {
+      if (el.tagName === 'INPUT' && el.type === 'file') out.push(el);
+      if (el.shadowRoot) walk(el.shadowRoot);
+    });
+    walk(document);
+    const want = ${JSON.stringify(kind)};
+    const ok = (el) => { const a = (el.accept || '').toLowerCase(); return want === 'image' ? /image/.test(a) : !/^image/.test(a); };
+    return out.filter(ok).at(-1) || null;
+  })()`;
+  const { result } = await send('Runtime.evaluate', { expression: expr });
+  if (!result?.objectId) throw new Error(kind === 'image' ? 'Tombol upload thumbnail tidak ditemukan di halaman.' : 'Kotak upload file tidak ditemukan — buka dialog upload dulu.');
+  await send('DOM.setFileInputFiles', { files, objectId: result.objectId });
+  scheduleDetach(tabId);
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === 'TUYUL_SET_FILE' && !sender.tab) { // hanya dari panel Klipin
+    setFileInput(msg.tabId, msg.files, msg.kind)
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: e.message }));
+    return true;
+  }
   if (msg?.type === 'TUYUL_DEBUG_ATTACH' && sender.tab?.id) {
     // Pasang debugger SEBELUM posisi tombol diukur: bilah "sedang men-debug" yang muncul
     // saat pertama dipasang memperkecil halaman dan menggeser tombol kirim.

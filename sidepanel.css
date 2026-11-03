@@ -231,7 +231,7 @@ h3.sec { margin: 16px 0 6px; }
 .seg button.off { opacity: .45; }
 
 /* ---------- paket YouTube ---------- */
-#thumbCanvas { width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 8px; border: 1px solid var(--line); background: #000; display: block; margin: 4px 0 8px; }
+#thumbCanvas { width: auto; height: auto; max-width: 100%; max-height: 60vh; border-radius: 8px; border: 1px solid var(--line); background: #000; display: block; margin: 4px auto 8px; }
 .bgstrip { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 6px; }
 .bgstrip button { flex: none; width: 88px; aspect-ratio: 16 / 9; padding: 0; border-radius: 6px; overflow: hidden; border: 2px solid transparent; background: var(--panel-2); cursor: pointer; position: relative; }
 .bgstrip button.active { border-color: var(--accent); }

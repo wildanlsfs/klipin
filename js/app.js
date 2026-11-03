@@ -880,7 +880,8 @@ $('#cancelRenderBtn').addEventListener('click', () => renderAbort?.abort());
 // S.yt = { titles, title, desc, tags, thumbTexts, thumbPrompt, bgs: [dataURL], thumb: { text, pos, color, bg } }
 // thumb.bg: 'g<n>' = latar buatan Flow/upload (S.yt.bgs[n]), 's<i>' = gambar scene nomor i.
 
-const THUMB_W = 1280, THUMB_H = 720;
+// Ukuran thumbnail mengikuti rasio proyek (Shorts 9:16 → thumbnail vertikal).
+const thumbSize = () => (S.ratio === '9:16' ? { w: 1080, h: 1920 } : S.ratio === '1:1' ? { w: 1080, h: 1080 } : { w: 1280, h: 720 });
 const THUMB_COLORS = { yellow: '#ffd400', white: '#ffffff', red: '#ff2d2d' };
 
 function ensureYt() {
@@ -927,8 +928,9 @@ async function makeYoutubePack() {
   });
   const yt = ensureYt();
   const chap = chaptersText(out.chapters);
-  yt.titles = out.titles;
-  yt.title = out.titles[0] || S.title;
+  // judul yang sudah dipilih user di langkah 1 tetap jadi pilihan utama (nama file video & thumbnail sama)
+  yt.titles = S.title && !out.titles.includes(S.title) ? [S.title, ...out.titles].slice(0, 5) : out.titles;
+  yt.title = S.title || out.titles[0] || '';
   yt.desc = [
     out.description,
     chap && `${S.lang === 'en' ? '⏱️ Chapters' : '⏱️ Bab'}\n${chap}`,
@@ -1048,20 +1050,27 @@ async function drawThumb(canvas = $('#thumbCanvas')) {
   const bg = currentBg();
   const im = bg ? await loadImg(bg.src).catch(() => null) : null;
   if (onScreen && seq !== drawSeq) return; // ada gambar yang lebih baru
+  if (onScreen) {
+    const { w, h: hh } = thumbSize();
+    if (canvas.width !== w || canvas.height !== hh) { canvas.width = w; canvas.height = hh; }
+    $('#thumbSizeMeta').textContent = `${w}×${hh}`;
+  }
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
+  const tall = H > W; // vertikal: teks melintang penuh di atas (kiri/kanan) atau bawah
   ctx.fillStyle = '#111';
   ctx.fillRect(0, 0, W, H);
   if (im) { // cover-crop; untuk "kiri", subjek digeser ke kanan agar teks tidak menutupinya
     const k = Math.max(W / im.width, H / im.height);
     const dw = im.width * k, dh = im.height * k;
-    const fx = pos === 'left' ? 0.65 : pos === 'right' ? 0.35 : 0.5;
+    const fx = tall ? 0.5 : pos === 'left' ? 0.65 : pos === 'right' ? 0.35 : 0.5;
     ctx.drawImage(im, (W - dw) * fx, (H - dh) * 0.4, dw, dh);
   }
   if (!text.trim()) return;
 
   // gelapkan sisi teks supaya terbaca
-  const g = pos === 'bottom' ? ctx.createLinearGradient(0, H, 0, H * 0.35)
+  const g = pos === 'bottom' ? ctx.createLinearGradient(0, H, 0, H * (tall ? 0.5 : 0.35))
+    : tall ? ctx.createLinearGradient(0, 0, 0, H * 0.5)
     : pos === 'left' ? ctx.createLinearGradient(0, 0, W * 0.7, 0) : ctx.createLinearGradient(W, 0, W * 0.3, 0);
   g.addColorStop(0, 'rgba(0,0,0,.78)');
   g.addColorStop(1, 'rgba(0,0,0,0)');
@@ -1069,11 +1078,13 @@ async function drawThumb(canvas = $('#thumbCanvas')) {
   ctx.fillRect(0, 0, W, H);
 
   const pad = 56;
-  const boxW = pos === 'bottom' ? W - pad * 2 : W * 0.56;
-  const boxH = pos === 'bottom' ? H * 0.45 : H - pad * 2;
+  const boxW = pos === 'bottom' || tall ? W - pad * 2 : W * 0.56;
+  const boxH = tall ? H * 0.3 : pos === 'bottom' ? H * 0.45 : H - pad * 2;
   const { size, lines, lh } = layoutThumbText(ctx, text, boxW, boxH);
   const blockH = lines.length * lh;
-  const y0 = pos === 'bottom' ? H - pad - blockH : (H - blockH) / 2;
+  // vertikal: hindari ±15% bawah yang tertutup tombol & judul di aplikasi YouTube
+  const y0 = tall ? (pos === 'bottom' ? H * 0.82 - blockH : H * 0.1)
+    : pos === 'bottom' ? H - pad - blockH : (H - blockH) / 2;
   ctx.textBaseline = 'top';
   ctx.textAlign = pos === 'right' ? 'right' : pos === 'bottom' ? 'center' : 'left';
   const x = pos === 'right' ? W - pad : pos === 'bottom' ? W / 2 : pad;
@@ -1122,9 +1133,8 @@ async function thumbBgFromFlow() {
   if (!prompt) throw new Error('Prompt latar thumbnail masih kosong — klik "Buat Judul, Deskripsi & Thumbnail" dulu.');
   const c = await checkFlow();
   if (!c.ok) throw new Error(`Flow: ${c.reason}`);
-  await configureFlow(c.tab.id, '16:9');
-  const res = await chrome.tabs.sendMessage(c.tab.id, { type: 'TUYUL_FLOW_GENERATE', prompt, label: 'Thumbnail', count: 1 })
-    .finally(() => S.ratio !== '16:9' && configureFlow(c.tab.id)); // kembalikan rasio proyek
+  await configureFlow(c.tab.id); // latar thumbnail = rasio proyek
+  const res = await chrome.tabs.sendMessage(c.tab.id, { type: 'TUYUL_FLOW_GENERATE', prompt, label: 'Thumbnail', count: 1 });
   if (!res?.ok) throw new Error(res?.error || 'Flow gagal membuat gambar.');
   const outs = res.images?.length ? res.images : [res];
   for (const o of outs.reverse()) await addThumbBg(o.image || o.url).catch(() => {});
@@ -1132,7 +1142,8 @@ async function thumbBgFromFlow() {
 }
 
 async function thumbBlob() {
-  const c = new OffscreenCanvas(THUMB_W, THUMB_H);
+  const { w, h: hh } = thumbSize();
+  const c = new OffscreenCanvas(w, hh);
   await drawThumb(c);
   let blob;
   for (const q of [0.92, 0.85, 0.75, 0.65]) { // YouTube: maks 2 MB
@@ -1399,6 +1410,8 @@ const agentTools = {
     const out = await renderVideo(null, progress);
     progress('menyimpan file…');
     const file = await downloadBlob(out.blob, `${safeName(S.title || S.rawTitle)}.mp4`);
+    S.lastVideo = file;
+    save();
     const v = $('#resultVideo');
     v.src = URL.createObjectURL(out.blob);
     v.classList.remove('hidden');
@@ -1434,11 +1447,14 @@ const agentTools = {
     renderYt();
     const blob = await thumbBlob();
     const file = await downloadBlob(blob, `${safeName(yt.title || S.title)} - thumbnail.jpg`);
+    S.lastThumb = file;
     // pratinjau kecil untuk dilihat agent
-    const c = new OffscreenCanvas(THUMB_W, THUMB_H);
+    const { w, h: hh } = thumbSize();
+    const c = new OffscreenCanvas(w, hh);
     await drawThumb(c);
-    const small = new OffscreenCanvas(640, 360);
-    small.getContext('2d').drawImage(c, 0, 0, 640, 360);
+    const k = 640 / Math.max(w, hh);
+    const small = new OffscreenCanvas(Math.round(w * k), Math.round(hh * k));
+    small.getContext('2d').drawImage(c, 0, 0, small.width, small.height);
     const prev = await small.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
     const b64 = await new Promise((resolve) => {
       const fr = new FileReader();
@@ -1451,6 +1467,18 @@ const agentTools = {
       image: { data: b64, mimeType: 'image/jpeg' },
     };
   },
+};
+
+// Masukkan video/thumbnail hasil Klipin ke dialog upload YouTube Studio yang sedang terbuka.
+agentTools.youtube_attach = async ({ file, kind = 'video' }) => {
+  const path = file || (kind === 'image' ? S.lastThumb : S.lastVideo);
+  if (!path) throw new Error(kind === 'image' ? 'Belum ada thumbnail — panggil klipin_thumbnail dulu.' : 'Belum ada video — panggil klipin_render dulu.');
+  const tabs = await chrome.tabs.query({ url: 'https://studio.youtube.com/*' });
+  const tab = tabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
+  if (!tab) throw new Error('Tab YouTube Studio tidak ditemukan. Buka studio.youtube.com dulu.');
+  const r = await chrome.runtime.sendMessage({ type: 'TUYUL_SET_FILE', tabId: tab.id, files: [path], kind });
+  if (!r?.ok) throw new Error(r?.error || 'Gagal memasukkan file.');
+  return { text: `File dimasukkan ke YouTube Studio: ${path}` };
 };
 
 // ---- status koneksi agent di panel
