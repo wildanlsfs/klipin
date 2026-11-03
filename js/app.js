@@ -1279,6 +1279,7 @@ const agentTools = {
         `TTS engine: ${ttsLines.join(', ')}`,
         `Suara Gemini: ${VOICES.map((v) => `${v.name} (${v.gender === 'L' ? 'pria' : 'wanita'}, ${v.desc})`).join('; ')}`,
         `Suara OpenAI: ${llm.OPENAI_VOICES.map((v) => v.id).join(', ')}`,
+        `Aturan naskah aktif (⚙︎ Pengaturan):\n${llm.rulesFor(settings, 'script').filter((r) => r.on && r.text.trim()).map((r) => `- ${r.text.trim()}`).join('\n')}`,
       ].join('\n'),
     };
   },
