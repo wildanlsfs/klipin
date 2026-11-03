@@ -341,11 +341,12 @@ Bahasa: ${lang === 'en' ? 'English' : 'Bahasa Indonesia yang natural (bukan terj
 
 Aturan:
 - Kalimat PERTAMA (≤3 detik, maks ±10 kata) langsung ke inti: klaim tajam, kontras, atau angka mengejutkan tentang topik. Tanpa salam, tanpa pengantar ("Pernahkah kamu…", "Di video ini…"), tanpa menjelaskan latar dulu. Kalimat kedua memberi alasan untuk terus menonton (janji jawaban/akibat).
-- Di tengah video (sekitar 40–60% durasi), sisipkan SATU pertanyaan singkat yang mengajak penonton memilih/berpendapat di komentar, terkait langsung dengan bagian yang sedang dibahas (contoh: "Kamu tim A atau tim B? Tulis di komentar."). Setelah itu lanjutkan isi seperti biasa.
+- Dalam 10 detik pertama (±3 kalimat) sudah muncul angka/kontras inti yang konkret (contoh: margin A vs margin B). JANGAN membuka dengan simulasi panjang ("Misalnya kamu beli 10 kg…", "Bayangkan…"). Hitungan atau contoh baru boleh SETELAH kontras inti disebut, dan dibuat ringkas.
+- Di sepertiga awal video (sekitar 25–40% durasi), sisipkan SATU pertanyaan komentar berupa dilema spesifik dari pengalaman penonton, terkait langsung dengan bagian yang sedang dibahas (contoh: "Pernah hitung susut bobot waktu bikin fillet? Berapa persen? Tulis di komentar."). Hindari ajakan umum seperti "Bagaimana pendapatmu?". Setelah itu lanjutkan isi seperti biasa.
 - Hanya teks yang dibacakan narator. TANPA judul bagian, label adegan, instruksi visual, tanda kurung, emoji, markdown, atau nomor.
 - Paragraf pendek (2–4 kalimat), dipisah baris kosong. Kalimat tidak terlalu panjang supaya enak dibacakan TTS.
 - Fakta harus akurat; jika ada yang belum pasti, sebutkan sebagai dugaan/teori.
-- Tutup dengan kesimpulan singkat dan ajakan singkat untuk subscribe (1 kalimat).`)).trim()
+- Tutup dengan kesimpulan singkat, lalu 1 kalimat ajakan: kirim video ini ke orang spesifik yang butuh (contoh: "Kirim ke teman yang lagi mulai ternak.") atau subscribe.`)).trim()
     .replace(/^\s*[#*].*$/gm, '').replace(/\*\*/g, '').replace(/\n{3,}/g, '\n\n').trim();
 }
 
