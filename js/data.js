@@ -180,7 +180,8 @@ export const NARRATION_STYLES = [
 export const DURATIONS = [1, 2, 3, 5, 8, 10, 15];
 
 // Kecepatan bicara rata-rata (kata per menit) untuk estimasi panjang naskah.
-export const WPM = { id: 135, en: 150 };
+// id: diukur dari video Klipin (Gemini TTS, jeda dipotong) ±160 kata/menit; diambil sedikit di bawahnya.
+export const WPM = { id: 150, en: 150 };
 
 export const VISUAL_STYLES = [
   {

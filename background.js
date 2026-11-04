@@ -92,6 +92,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, error: e.message }));
     return true;
   }
+  if (msg?.type === 'TUYUL_SLEEP' && sender.tab?.id) { // jeda untuk tab Flow yang tersembunyi (lihat content/flow.js)
+    setTimeout(() => sendResponse({ ok: true }), Math.min(Number(msg.ms) || 0, 30000));
+    return true;
+  }
   if (msg?.type === 'TUYUL_DEBUG_ATTACH' && sender.tab?.id) {
     // Pasang debugger SEBELUM posisi tombol diukur: bilah "sedang men-debug" yang muncul
     // saat pertama dipasang memperkecil halaman dan menggeser tombol kirim.

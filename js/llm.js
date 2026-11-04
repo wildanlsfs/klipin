@@ -70,7 +70,9 @@ export const DEFAULT_RULES = {
     { id: 'tts', label: 'Enak dibacakan TTS', text: 'Paragraf pendek (2–4 kalimat), dipisah baris kosong. Kalimat tidak terlalu panjang supaya enak dibacakan TTS.' },
     { id: 'facts', label: 'Fakta akurat', text: 'Fakta harus akurat; jika ada yang belum pasti, sebutkan sebagai dugaan/teori.' },
     { id: 'cta', label: 'Ajakan di penutup', text: 'Penutup: kesimpulan singkat, lalu 1 kalimat ajakan (kirim video ini ke orang spesifik yang butuh, contoh: "Kirim ke teman yang lagi mulai ternak.", atau subscribe).' },
-    { id: 'loop', label: 'Loop ke pembuka', text: 'Kalimat paling akhir (setelah ajakan) pendek dan nyambung ke kalimat pertama (mengulang kata kunci atau pertanyaan pembuka), supaya video terasa mulus saat terputar ulang.' },
+    { id: 'loop', label: 'Loop ke pembuka (Shorts)', for: 'short', text: 'Kalimat paling akhir (setelah ajakan) pendek dan nyambung ke kalimat pertama (mengulang kata kunci atau pertanyaan pembuka), supaya video terasa mulus saat terputar ulang.' },
+    { id: 'sections', label: 'Bagian jelas (video panjang)', for: 'long', text: 'Susun 4–7 bagian berurutan, masing-masing membahas satu sub-topik (nanti jadi bab YouTube). Kalimat pertama tiap bagian langsung menyebut isinya, tanpa judul bagian.' },
+    { id: 'rehook', label: 'Pancingan berkala (video panjang)', for: 'long', text: 'Setiap ±45–60 detik buka pertanyaan atau janji baru yang baru dijawab beberapa paragraf kemudian, supaya penonton bertahan. Jawaban/hitungan utama dibuka menjelang akhir, bukan di awal.' },
   ],
   scene: [
     { id: 'describe', label: 'Isi prompt', text: '1–3 kalimat, deskripsikan subjek, aksi, latar, komposisi kamera, dan suasana yang MENGGAMBARKAN isi narasi.' },
@@ -81,6 +83,8 @@ export const DEFAULT_RULES = {
 };
 
 // Daftar aturan efektif: bawaan (dengan perubahan pengguna) lalu aturan tambahan pengguna.
+// Aturan bawaan bisa khusus Shorts (for: 'short', < 2 menit) atau video panjang (for: 'long').
+export const ruleApplies = (r, minutes) => !r.for || r.for === (minutes == null ? r.for : minutes < 2 ? 'short' : 'long');
 export function rulesFor(s, kind) {
   const defs = DEFAULT_RULES[kind] || [];
   const user = s.rules?.[kind] || [];
@@ -116,7 +120,8 @@ export function visualStyles(s) {
   ];
 }
 
-const ruleLines = (s, kind) => rulesFor(s, kind).filter((r) => r.on && r.text.trim()).map((r) => `- ${r.text.trim()}`).join('\n');
+const ruleLines = (s, kind, minutes) => rulesFor(s, kind).filter((r) => r.on && r.text.trim() && ruleApplies(r, minutes))
+  .map((r) => `- ${r.text.trim()}`).join('\n');
 
 export const OPENAI_VOICES = [
   { id: 'onyx', name: 'Onyx', gender: 'L', desc: 'Dalam, berwibawa' },
@@ -384,7 +389,7 @@ export async function listModels(s, target) {
 export async function expandTitle(s, raw, lang) {
   const out = await generateJSON(s, 'title', `Kamu adalah ahli judul YouTube untuk channel faceless edukasi/dokumenter.
 Kembangkan judul/ide mentah berikut menjadi 5 judul video yang lebih menarik, rapi, memancing rasa penasaran, tetap jujur (tidak menyesatkan), dan SEO-friendly.
-Bahasa judul: ${lang === 'en' ? 'English' : 'Bahasa Indonesia'}. Maksimal 90 karakter per judul.
+Bahasa judul: ${lang === 'en' ? 'English' : 'Bahasa Indonesia'}. Maksimal 70 karakter per judul.
 
 Ide mentah: """${raw}"""
 
@@ -393,9 +398,13 @@ Balas HANYA JSON: {"titles": ["...", "..."]}`, (o) => Array.isArray(o) || Array.
   return titles.filter((t) => typeof t === 'string' && t.trim()).slice(0, 5);
 }
 
+const countWords = (t) => (t.match(/\S+/g) || []).length;
+const cleanScript = (t) => t.trim().replace(/^\s*[#*].*$/gm, '').replace(/\*\*/g, '').replace(/\n{3,}/g, '\n\n').trim();
+
 export async function writeScript(s, { title, format, style, minutes, lang, wpm }) {
   const words = Math.round(minutes * wpm);
-  return (await generateText(s, 'script', `Tulis naskah voiceover untuk video YouTube faceless.
+  const rules = ruleLines(s, 'script', minutes);
+  let script = cleanScript(await generateText(s, 'script', `Tulis naskah voiceover untuk video YouTube faceless.
 
 Judul: "${title}"
 Format konten: ${format.label} — ${format.hint}
@@ -404,8 +413,23 @@ Target durasi: ±${minutes} menit (≈${words} kata, toleransi ±10%)
 Bahasa: ${lang === 'en' ? 'English' : 'Bahasa Indonesia yang natural (bukan terjemahan kaku)'}
 
 Aturan:
-${ruleLines(s, 'script')}`)).trim()
-    .replace(/^\s*[#*].*$/gm, '').replace(/\*\*/g, '').replace(/\n{3,}/g, '\n\n').trim();
+${rules}`));
+  // AI sering meleset jauh dari target kata (terutama naskah panjang) → satu kali revisi panjang naskah
+  const n = countWords(script);
+  if (n < words * 0.85 || n > words * 1.2) {
+    const longer = n < words;
+    const fixed = cleanScript(await generateText(s, 'script', `Naskah voiceover berikut ${longer ? 'terlalu pendek' : 'terlalu panjang'}: ${n} kata, targetnya ±${words} kata (±${minutes} menit).
+Tulis ulang LENGKAP menjadi ±${words} kata. ${longer ? 'Tambah isi yang benar-benar baru (fakta, angka, contoh, akibat), bukan mengulang atau memperlambat.' : 'Pangkas bagian yang paling lemah atau berulang, pertahankan pembuka, angka inti, dan penutup.'}
+Judul: "${title}". Gaya narasi: ${style.script}. Tetap patuhi aturan:
+${rules}
+
+Naskah:
+${script}
+
+Balas hanya dengan naskah barunya.`));
+    if (Math.abs(countWords(fixed) - words) < Math.abs(n - words)) script = fixed;
+  }
+  return script;
 }
 
 export async function scenePrompts(s, { title, visualStyle, ratio, scenes, characterNote }) {
@@ -417,7 +441,7 @@ Gaya visual WAJIB (sama di semua scene): ${visualStyle.prompt}
 ${characterNote ? `Konsistensi karakter/tempat: ${characterNote}` : ''}
 
 Aturan prompt:
-${ruleLines(s, 'scene')}
+${ruleLines(s, 'scene', null)}
 
 Scene:
 ${list}
@@ -530,13 +554,28 @@ function base64ToBytes(b64) {
 }
 
 async function ttsGeminiChunk(s, text, styleInstruction, voice) {
-  const j = await geminiGenerate(s, {
-    contents: [{ role: 'user', parts: [{ text: `${styleInstruction}\n\n${text}` }] }],
-    generationConfig: {
-      responseModalities: ['AUDIO'],
-      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
-    },
-  }, s.gemini.ttsModel);
+  // Instruksi gaya + teks yang dipisah jelas; kalau model tetap "menjawab" dengan teks
+  // ("Model tried to generate text…"), ulangi, lalu terakhir tanpa instruksi gaya.
+  const prompts = [
+    `${styleInstruction}\nBacakan transkrip berikut persis apa adanya, tanpa menambah atau mengubah kata:\n\n${text}`,
+    `${styleInstruction}\nBacakan transkrip berikut persis apa adanya, tanpa menambah atau mengubah kata:\n\n${text}`,
+    `Read aloud exactly:\n\n${text}`,
+  ];
+  let j;
+  for (let k = 0; ; k++) {
+    try {
+      j = await geminiGenerate(s, {
+        contents: [{ role: 'user', parts: [{ text: styleInstruction ? prompts[k] : prompts[2] }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+        },
+      }, s.gemini.ttsModel);
+      break;
+    } catch (e) {
+      if (k >= prompts.length - 1 || !/generate text/i.test(e.message)) throw e;
+    }
+  }
   const data = j.candidates?.[0]?.content?.parts?.find((p) => p.inlineData)?.inlineData?.data;
   if (!data) throw new Error('Gemini TTS tidak mengembalikan audio.');
   const bytes = base64ToBytes(data);

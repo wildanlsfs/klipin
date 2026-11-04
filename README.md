@@ -63,6 +63,8 @@ API key tetap di extension dan tidak dikirim ke agent. Matikan kapan saja lewat 
 - **Aturan naskah** (pembuka 3 detik, inti dalam 10 detik, pertanyaan komentar, padat informasi, ajakan penutup, loop, dll.)
   dan **aturan prompt gambar** bisa dimatikan, diubah teksnya, atau ditambah aturan sendiri.
 - **Gaya visual:** prompt gaya bawaan bisa diganti, dan kamu bisa menambah gaya sendiri (muncul di pilihan langkah 3 dan di `klipin_options`).
+- Sebagian aturan bawaan hanya berlaku untuk Shorts (< 2 menit, mis. loop ke pembuka) atau video panjang
+  (bagian jelas untuk bab, pancingan berkala).
 - ↺ mengembalikan teks bawaan. Aturan bawaan yang tidak kamu ubah ikut diperbarui saat Klipin update.
 
 ## Alur
@@ -76,6 +78,8 @@ API key tetap di extension dan tidak dikirim ke agent. Matikan kapan saja lewat 
 4. **Gambar** – buka sebuah project di Google Flow (flow.google.com) → *Kirim Semua ke Flow*. Klipin otomatis mengatur Flow ke mode langsung
    (bukan Agen), **Gambar**, rasio proyek, dan **x1** gambar per prompt.
    Extension mengetik prompt, mengirim (dan mengulang kalau Flow masih sibuk), menunggu, lalu menarik gambar ke panel.
+   Bawaannya **5 prompt sekaligus** (pilihan "Kirim sekaligus" 1–5); tiap gambar dicocokkan ke scene lewat teks prompt-nya
+   (±10 menit untuk 46 gambar). Tab Flow dijadikan tab aktif selama proses karena Chrome memperlambat tab yang tersembunyi.
    Kalau Flow tetap membuat 2+ gambar per prompt, semuanya disimpan — klik **⇄** di gambar untuk memilih. Scene gagal → ↻ atau ⬆ upload manual.
 5. **Render** – resolusi 1080/720, FPS 24/30, subtitle → *Render MP4* (pilih lokasi simpan). Encode H.264 + AAC via WebCodecs,
    ±115 fps di 1080p (video 3 menit ≈ 40–50 detik).

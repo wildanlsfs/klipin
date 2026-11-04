@@ -214,7 +214,7 @@ function refreshStyleInstr() {
 
 function updateScriptMeta() {
   const words = S.script.trim() ? S.script.trim().split(/\s+/).length : 0;
-  const est = words / (WPM[S.lang] || 135);
+  const est = words / (WPM[S.lang] || 150);
   $('#scriptMeta').textContent = words ? `${words} kata · ±${est.toFixed(1)} menit` : '';
 }
 
@@ -294,7 +294,7 @@ $('#writeScriptBtn').addEventListener('click', (e) => busy(e.currentTarget, '⏳
   if (!title) throw new Error('Judul masih kosong.');
   if (S.script.trim() && !confirm('Naskah yang ada akan diganti. Lanjut?')) return;
   S.script = await llm.writeScript(settings, {
-    title, format: fmtStyle(), style: narrStyle(), minutes: S.minutes, lang: S.lang, wpm: WPM[S.lang] || 135,
+    title, format: fmtStyle(), style: narrStyle(), minutes: S.minutes, lang: S.lang, wpm: WPM[S.lang] || 150,
   });
   $('#script').value = S.script;
   updateScriptMeta();
@@ -497,7 +497,7 @@ async function scenesFromScriptNow(btn) {
   if (!S.script.trim()) throw new Error('Naskah masih kosong (langkah 2).');
   if (audioRaw && !audioTrim) doTrim();
   const a = currentAudio();
-  const total = a ? audioLib.duration(a) : (S.script.split(/\s+/).length / (WPM[S.lang] || 135)) * 60;
+  const total = a ? audioLib.duration(a) : (S.script.split(/\s+/).length / (WPM[S.lang] || 150)) * 60;
   if (!a) toast('Belum ada audio — durasi scene diperkirakan dari panjang naskah.');
   S.scenes = scenesFromScript(S.script, total, S.sceneSec, audioPauses());
   S.syncV = SYNC_V;
@@ -697,6 +697,11 @@ async function configureFlow(tabId, ratio = S.ratio) {
   return r;
 }
 
+// jumlah prompt yang dikirim ke Flow sekaligus (pilihan di langkah 4, disimpan per browser)
+const flowParallel = () => Math.min(5, Math.max(1, Number($('#flowPar').value) || 1));
+chrome.storage.local.get('flowParallel').then(({ flowParallel: v }) => { if (v) $('#flowPar').value = String(v); });
+$('#flowPar').addEventListener('change', () => chrome.storage.local.set({ flowParallel: flowParallel() }));
+
 async function runFlow(targets, onProgress = () => {}) {
   if (!targets.length) return toast('Semua scene sudah punya gambar.', 'ok');
   if (targets.some((s) => !s.prompt)) return toast('Ada scene tanpa prompt. Buat scene dulu di langkah 3.', 'err');
@@ -704,54 +709,64 @@ async function runFlow(targets, onProgress = () => {}) {
   if (!c.ok) return toast(`Flow: ${c.reason}`, 'err');
 
   flowStop = false;
+  // Tab Flow yang tersembunyi diperlambat Chrome (skrip Flow sendiri ikut lambat: ±3× lebih lama),
+  // jadi jadikan tab aktif di jendelanya. Jendela tidak ikut dipindah ke depan.
+  if (!c.tab.active) await chrome.tabs.update(c.tab.id, { active: true }).catch(() => {});
   await configureFlow(c.tab.id);
   $('#sendAllBtn').disabled = true;
   $('#stopFlowBtn').classList.remove('hidden');
-  let ok = 0, fail = 0;
-  try {
-    for (let k = 0; k < targets.length && !flowStop; k++) {
-      const s = targets[k];
-      s.status = 'working';
-      s.error = '';
-      updateThumb(s);
-      document.getElementById(`thumb-${s.i}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      setProgress('#flowProgress', k / targets.length);
-      onProgress(`scene ${s.i} (${k + 1}/${targets.length})`);
+  let ok = 0, fail = 0, started = 0;
+  const par = targets.length > 1 ? flowParallel() : 1;
+  // beberapa scene diproses Flow bersamaan; tiap "worker" mengambil scene berikutnya
+  const one = async (k) => {
+    const s = targets[k];
+    s.status = 'working';
+    s.error = '';
+    updateThumb(s);
+    document.getElementById(`thumb-${s.i}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    setProgress('#flowProgress', (ok + fail) / targets.length);
+    onProgress(`scene ${s.i} (${k + 1}/${targets.length}${par > 1 ? `, ${par} sekaligus` : ''})`);
 
-      let res = null;
-      for (let attempt = 0; attempt < 2 && !flowStop; attempt++) {
-        res = await chrome.tabs.sendMessage(c.tab.id, {
-          type: 'TUYUL_FLOW_GENERATE', prompt: s.prompt, label: `Scene ${s.i}/${S.scenes.length}`, count: 1,
-        }).catch((e) => ({ ok: false, error: errMsg(e) }));
-        if (res?.ok) break;
-        if (/tidak ditemukan|Receiving end/i.test(res?.error || '')) break; // bukan masalah sementara
-      }
-
-      if (res?.ok) {
-        try {
-          const outs = res.images?.length ? res.images : [res];
-          const imgs = [];
-          for (const o of outs) {
-            try { imgs.push(await normalizeImage(o.image || o.url)); } catch {}
-          }
-          if (!imgs.length) throw new Error('kosong');
-          [s.image, ...s.alts] = imgs; // output lain dari Flow disimpan sebagai pilihan (⇄)
-          s.status = 'done';
-          ok++;
-        } catch (e) {
-          s.status = 'error';
-          s.error = 'gagal ambil gambar';
-          fail++;
-        }
-      } else {
-        s.status = 'error';
-        s.error = res?.error || 'gagal';
-        fail++;
-        if (/tidak ditemukan|Receiving end/i.test(s.error)) { flowStop = true; toast(s.error, 'err'); }
-      }
-      updateThumb(s);
-      save();
+    let res = null;
+    for (let attempt = 0, waits = 0; attempt < 2 && !flowStop; attempt++) {
+      res = await chrome.tabs.sendMessage(c.tab.id, {
+        type: 'TUYUL_FLOW_GENERATE', prompt: s.prompt, label: `Scene ${s.i}/${S.scenes.length}`, count: 1,
+      }).catch((e) => ({ ok: false, error: errMsg(e) }));
+      if (res?.ok) break;
+      if (/tidak ditemukan|Receiving end/i.test(res?.error || '')) break; // bukan masalah sementara
+      if (/sedang memproses/i.test(res?.error || '') && waits++ < 150) { attempt--; await new Promise((r) => setTimeout(r, 2000)); } // antre, bukan gagal
     }
+
+    if (res?.ok) {
+      try {
+        const outs = res.images?.length ? res.images : [res];
+        const imgs = [];
+        for (const o of outs) {
+          try { imgs.push(await normalizeImage(o.image || o.url)); } catch {}
+        }
+        if (!imgs.length) throw new Error('kosong');
+        [s.image, ...s.alts] = imgs; // output lain dari Flow disimpan sebagai pilihan (⇄)
+        s.status = 'done';
+        ok++;
+      } catch (e) {
+        s.status = 'error';
+        s.error = 'gagal ambil gambar';
+        fail++;
+      }
+    } else {
+      s.status = 'error';
+      s.error = res?.error || 'gagal';
+      fail++;
+      if (/tidak ditemukan|Receiving end/i.test(s.error)) { flowStop = true; toast(s.error, 'err'); }
+    }
+    updateThumb(s);
+    setProgress('#flowProgress', (ok + fail) / targets.length);
+    save();
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(par, targets.length) }, async () => {
+      while (!flowStop && started < targets.length) await one(started++);
+    }));
   } finally {
     setProgress('#flowProgress', null);
     $('#sendAllBtn').disabled = false;
@@ -1279,7 +1294,7 @@ const agentTools = {
         `TTS engine: ${ttsLines.join(', ')}`,
         `Suara Gemini: ${VOICES.map((v) => `${v.name} (${v.gender === 'L' ? 'pria' : 'wanita'}, ${v.desc})`).join('; ')}`,
         `Suara OpenAI: ${llm.OPENAI_VOICES.map((v) => v.id).join(', ')}`,
-        `Aturan naskah aktif (⚙︎ Pengaturan):\n${llm.rulesFor(settings, 'script').filter((r) => r.on && r.text.trim()).map((r) => `- ${r.text.trim()}`).join('\n')}`,
+        `Aturan naskah aktif (⚙︎ Pengaturan; durasi proyek ini ${S.minutes} menit):\n${llm.rulesFor(settings, 'script').filter((r) => r.on && r.text.trim() && llm.ruleApplies(r, S.minutes)).map((r) => `- ${r.text.trim()}`).join('\n')}`,
       ].join('\n'),
     };
   },
@@ -1330,13 +1345,13 @@ const agentTools = {
       if (!title) throw new Error('Judul masih kosong — panggil klipin_titles atau klipin_set_title dulu.');
       progress('menulis naskah…');
       S.script = await llm.writeScript(settings, {
-        title, format: fmtStyle(), style: narrStyle(), minutes: S.minutes, lang: S.lang, wpm: WPM[S.lang] || 135,
+        title, format: fmtStyle(), style: narrStyle(), minutes: S.minutes, lang: S.lang, wpm: WPM[S.lang] || 150,
       });
     }
     initUI();
     save();
     const words = S.script.split(/\s+/).length;
-    return { text: `Naskah (${words} kata, ±${(words / (WPM[S.lang] || 135)).toFixed(1)} menit):\n\n${S.script}\n\nStyle instruction suara: ${S.styleInstr}` };
+    return { text: `Naskah (${words} kata, ±${(words / (WPM[S.lang] || 150)).toFixed(1)} menit):\n\n${S.script}\n\nStyle instruction suara: ${S.styleInstr}` };
   },
 
   async voice({ engine, voice }, progress) {
@@ -1479,7 +1494,9 @@ agentTools.youtube_attach = async ({ file, kind = 'video' }) => {
   const tab = tabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
   if (!tab) throw new Error('Tab YouTube Studio tidak ditemukan. Buka studio.youtube.com dulu.');
   const r = await chrome.runtime.sendMessage({ type: 'TUYUL_SET_FILE', tabId: tab.id, files: [path], kind });
-  if (!r?.ok) throw new Error(r?.error || 'Gagal memasukkan file.');
+  // tanpa balasan = background (service worker) masih versi lama: halaman panel sudah memuat kode baru dari disk, background belum
+  if (!r) throw new Error('Background Klipin masih versi lama — klik ↻ pada Klipin di chrome://extensions, lalu buka ulang panel Klipin.');
+  if (!r.ok) throw new Error(r.error || 'Gagal memasukkan file.');
   return { text: `File dimasukkan ke YouTube Studio: ${path}` };
 };
 

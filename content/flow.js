@@ -5,9 +5,24 @@
   if (window.__tuyulFlow) return;
   window.__tuyulFlow = true;
 
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // Tab Flow biasanya di belakang, dan Chrome memperlambat setTimeout di tab tersembunyi sampai ±1×/menit.
+  // Jadi saat tersembunyi, jeda diatur background (service worker tidak ikut diperlambat).
+  const sleep = (ms) => new Promise((resolve) => {
+    if (!document.hidden) return setTimeout(resolve, ms);
+    chrome.runtime.sendMessage({ type: 'TUYUL_SLEEP', ms })
+      .then((r) => (r?.ok ? resolve() : setTimeout(resolve, ms)), () => setTimeout(resolve, ms));
+  });
   const seen = new Set(); // src gambar yang sudah ada / sudah dipakai
-  let busy = false;
+  const MAX_ACTIVE = 5; // prompt yang boleh diproses Flow bersamaan
+  let active = 0;
+  let configuring = false;
+  // mengetik & mengirim prompt hanya boleh satu per satu (satu kolom prompt)
+  let submitQ = Promise.resolve();
+  const exclusive = (fn) => {
+    const p = submitQ.then(fn);
+    submitQ = p.catch(() => {});
+    return p;
+  };
 
   const visible = (el) => {
     if (!el) return false;
@@ -245,15 +260,115 @@
     badge.style.display = text ? 'block' : 'none';
   }
 
-  async function generate({ prompt, label, count = 1, timeoutMs = 180000 }) {
-    const input = findInput();
-    if (!input) throw new Error('Kolom prompt Flow tidak ditemukan. Buka sebuah project di Flow dulu.');
-    status(`${label}: mengetik prompt…`);
-    markAllSeen();
+  // ---- Beberapa prompt sekaligus ----
+  // Flow menampilkan tiap prompt sebagai .batch-container (teks prompt + gambarnya), terbaru di atas.
+  // Gambar dicocokkan ke prompt lewat teks itu, jadi beberapa prompt bisa diproses bersamaan.
+  const norm = (t) => (t || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const claimed = new Set(); // data-media-id yang sudah diberikan ke salah satu prompt
+  const jobs = new Set();
+  const mediaIds = () => new Set([...document.querySelectorAll('img[data-media-id]')].map((i) => i.dataset.mediaId));
 
-    if (!(await submitPrompt(prompt, label))) {
-      throw new Error('Prompt tidak terkirim ke Flow (tombol kirim tidak merespons — kredit habis atau Flow masih sibuk?).');
+  function scanBatches() {
+    const open = [...jobs].filter((j) => !j.done);
+    const first = new Set(); // per job hanya batch cocok yang paling baru (paling atas) yang dipakai
+    for (const b of document.querySelectorAll('.batch-container')) {
+      const t = norm([...b.querySelectorAll('span.text-part')].map((x) => x.textContent).join(' '));
+      if (t.length < 20) continue;
+      for (const j of open) {
+        if (j.done || first.has(j) || !(j.want === t || j.want.includes(t) || t.includes(j.want))) continue;
+        const imgs = [...b.querySelectorAll('img[data-media-id]')].filter((i) => i.complete && i.naturalWidth >= 256
+          && !claimed.has(i.dataset.mediaId) && !j.pre.has(i.dataset.mediaId));
+        if (!imgs.length) { first.add(j); continue; } // masih dibuat
+        first.add(j);
+        imgs.forEach((i) => claimed.add(i.dataset.mediaId));
+        j.done = true;
+        j.resolve(imgs.slice(0, 4));
+        break; // batch ini sudah dipakai
+      }
     }
+  }
+
+  // Daftar Flow memakai virtual scroll: batch di luar layar dihapus dari halaman.
+  // Gulir sebentar ke bawah supaya hasil prompt yang lebih lama ikut terbaca, lalu kembali ke atas.
+  async function sweep() {
+    const sc = document.querySelector('.batch-container')?.closest('.cdk-virtual-scrollable');
+    if (!sc) return;
+    const end = Math.min(sc.scrollHeight, sc.clientHeight * (1 + Math.ceil(jobs.size / 2)));
+    for (let y = sc.clientHeight / 2; y <= end && [...jobs].some((j) => !j.done); y += sc.clientHeight / 2) {
+      sc.scrollTop = y;
+      await sleep(400);
+      scanBatches();
+    }
+    sc.scrollTop = 0;
+  }
+
+  let polling = false;
+  async function poll() {
+    if (polling) return;
+    polling = true;
+    try {
+      for (let tick = 0; [...jobs].some((j) => !j.done); tick++) {
+        await sleep(1000);
+        scanBatches();
+        const now = Date.now();
+        for (const j of jobs) {
+          if (!j.done && now - j.t0 > j.timeoutMs) { j.done = true; j.reject(new Error('Timeout: gambar tidak muncul di Flow.')); }
+        }
+        if (tick % 6 === 5 && [...jobs].some((j) => !j.done && now - j.t0 > 15000)) await sweep();
+        const left = [...jobs].filter((j) => !j.done).length;
+        if (left) status(`menunggu ${left} gambar…`);
+      }
+    } finally {
+      polling = false;
+    }
+  }
+
+  const batchOf = (want) => [...document.querySelectorAll('.batch-container')].some((b) => {
+    const t = norm([...b.querySelectorAll('span.text-part')].map((x) => x.textContent).join(' '));
+    return t.length >= 20 && (want === t || want.includes(t) || t.includes(want));
+  });
+
+  async function generate(msg) {
+    const { prompt, label, timeoutMs = 240000 } = msg;
+    if (!findInput()) throw new Error('Kolom prompt Flow tidak ditemukan. Buka sebuah project di Flow dulu.');
+    const job = { want: norm(prompt), pre: mediaIds(), t0: 0, timeoutMs };
+    const done = new Promise((resolve, reject) => Object.assign(job, { resolve, reject }));
+    // Ketik & kirim satu per satu. Project yang baru dibuka tampil sebagai grid tanpa teks prompt;
+    // tampilan per-prompt (.batch-container) baru muncul setelah prompt dikirim, jadi jalurnya
+    // dipilih SESUDAH kirim: ada batch untuk prompt ini → paralel, tidak ada → cara lama (tetap antre).
+    const legacy = await exclusive(async () => {
+      status(`${label}: mengetik prompt…`);
+      markAllSeen();
+      if (!(await submitPrompt(prompt, label))) {
+        throw new Error('Prompt tidak terkirim ke Flow (tombol kirim tidak merespons — kredit habis atau Flow masih sibuk?).');
+      }
+      for (let i = 0; i < 8; i++) {
+        await sleep(500);
+        if (batchOf(job.want)) return null;
+      }
+      return waitFresh(msg);
+    });
+    if (legacy) return legacy;
+    job.t0 = Date.now();
+    jobs.add(job);
+    poll();
+    try {
+      const imgs = await done;
+      await sleep(600); // gambar resolusi penuh termuat
+      const images = [];
+      for (const img of imgs) {
+        seen.add(img.currentSrc || img.src);
+        images.push({ image: await toDataUrl(img), url: img.currentSrc || img.src });
+      }
+      status(`${label}: selesai ✓`);
+      return { ...images[0], images };
+    } finally {
+      jobs.delete(job);
+    }
+  }
+
+  // Cara lama (satu per satu): gambar baru = gambar yang belum pernah terlihat di halaman.
+  async function waitFresh({ label, count = 1, timeoutMs = 180000 }) {
     status(`${label}: menunggu gambar…`);
 
     const t0 = Date.now();
@@ -305,8 +420,9 @@
       return false;
     }
     if (msg?.type === 'TUYUL_FLOW_CONFIGURE') {
-      if (busy) { sendResponse({ ok: false, error: 'Flow sedang memproses prompt.' }); return false; }
-      configure(msg).then(sendResponse, (e) => sendResponse({ ok: false, error: e.message }));
+      if (active) { sendResponse({ ok: false, error: 'Flow sedang memproses prompt.' }); return false; }
+      configuring = true;
+      configure(msg).then(sendResponse, (e) => sendResponse({ ok: false, error: e.message })).finally(() => { configuring = false; });
       return true;
     }
     if (msg?.type === 'TUYUL_STATUS') {
@@ -314,12 +430,12 @@
       return false;
     }
     if (msg?.type === 'TUYUL_FLOW_GENERATE') {
-      if (busy) { sendResponse({ ok: false, error: 'Flow sedang memproses prompt lain.' }); return false; }
-      busy = true;
-      // busy dilepas SEBELUM membalas, supaya prompt berikutnya tidak tertolak
+      if (active >= MAX_ACTIVE || configuring) { sendResponse({ ok: false, error: 'Flow sedang memproses prompt lain.' }); return false; }
+      active++;
+      // active dikurangi SEBELUM membalas, supaya prompt berikutnya tidak tertolak
       generate(msg)
-        .then((r) => { busy = false; sendResponse({ ok: true, ...r }); })
-        .catch((e) => { busy = false; status(`gagal — ${e.message}`); sendResponse({ ok: false, error: e.message }); });
+        .then((r) => { active--; sendResponse({ ok: true, ...r }); })
+        .catch((e) => { active--; status(`gagal — ${e.message}`); sendResponse({ ok: false, error: e.message }); });
       return true; // respons async
     }
     return false;
