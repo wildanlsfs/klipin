@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Klipin",
-  "version": "1.5.9",
+  "version": "1.5.10",
   "description": "Judul → naskah → suara → scene → gambar otomatis di Google Flow → render MP4. Semua dari side panel.",
   "minimum_chrome_version": "116",
   "icons": {

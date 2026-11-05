@@ -83,8 +83,8 @@ const TOOLS = [
   },
   {
     name: 'klipin_load_audio',
-    description: 'Load a voice-over audio file (wav/mp3/m4a/…) from this computer into the project, e.g. a file the user downloaded from Google AI Studio.',
-    inputSchema: obj({ path: str('Absolute path to the audio file (~ allowed)') }, ['path']),
+    description: 'Load a voice-over audio file (wav/mp3/m4a/…) from this computer into the project, e.g. a file downloaded from Google AI Studio. Pass a folder (e.g. "~/Downloads") to load the newest audio file in it (downloaded in the last 30 minutes).',
+    inputSchema: obj({ path: str('Absolute path to the audio file, or a folder to take its newest audio file (~ allowed)') }, ['path']),
   },
   {
     name: 'klipin_scenes',
@@ -239,6 +239,21 @@ function toContent(job) {
 const expandHome = (p) => (p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p);
 const AUDIO_EXT = /\.(wav|mp3|m4a|aac|ogg|oga|flac|webm|opus)$/i;
 
+// Folder → file audio terbaru di dalamnya (30 menit terakhir). Nama file download AI Studio berisi jam,
+// jadi agent tidak bisa menebaknya. Dipanggil sebelum diteruskan ke server lain (yang mungkin versi lama).
+function resolveAudioPath(p) {
+  const file = path.resolve(expandHome(String(p || '')));
+  try {
+    if (!fs.statSync(file).isDirectory()) return file;
+  } catch {
+    return file;
+  }
+  const newest = fs.readdirSync(file).filter((f) => AUDIO_EXT.test(f))
+    .map((f) => ({ f: path.join(file, f), t: fs.statSync(path.join(file, f)).mtimeMs }))
+    .filter((x) => Date.now() - x.t < 30 * 60 * 1000).sort((a, b) => b.t - a.t)[0];
+  return newest ? newest.f : path.join(file, '(tidak ada file audio baru dalam 30 menit terakhir).wav');
+}
+
 // forwarded = dari server Klipin lain (bisa versi lebih baru dengan tool yang belum dikenal di sini)
 async function runTool(name, args = {}, forwarded = false) {
   if (!TOOLS.some((t) => t.name === name) && !(forwarded && /^klipin_\w+$/.test(name))) return { content: [{ type: 'text', text: `Tool tidak dikenal: ${name}` }], isError: true };
@@ -249,7 +264,7 @@ async function runTool(name, args = {}, forwarded = false) {
     return toContent(job);
   }
   if (name === 'klipin_load_audio') {
-    const file = path.resolve(expandHome(String(args.path || '')));
+    const file = resolveAudioPath(args.path);
     if (!AUDIO_EXT.test(file)) return { content: [{ type: 'text', text: 'File harus audio (wav, mp3, m4a, ogg, flac, webm).' }], isError: true };
     let st;
     try { st = fs.statSync(file); } catch { return { content: [{ type: 'text', text: `File tidak ditemukan: ${file}` }], isError: true }; }
@@ -374,6 +389,7 @@ async function forward(sharedSecret, name, args) {
 
 const SECRET = secret();
 async function callTool(name, args) {
+  if (name === 'klipin_load_audio') args = { ...args, path: resolveAudioPath(args?.path) };
   if (!primary) {
     starting ||= becomePrimary(SECRET).then((ok) => { primary = ok; starting = null; });
     await starting;

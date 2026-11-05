@@ -39,7 +39,8 @@ membuat scene, menyuruh Google Flow membuat gambar, me-render MP4, sampai menyia
    (Kalau panel belum terbuka saat agent mulai bekerja, Klipin membukanya sendiri di tab dalam ±30 detik.)
 2. Untuk gambar: buka sebuah project di [Google Flow](https://flow.google.com).
 3. Suara: agent bisa membuat suara via API (kalau key TTS diisi), atau kamu buat gratis di Google AI Studio lalu
-   beri tahu agent lokasi filenya (mis. *"audionya di Downloads/lele.wav"*).
+   beri tahu agent lokasi filenya (mis. *"audionya di Downloads/lele.wav"*). Cukup *"audionya di Downloads"*
+   juga bisa: agent mengambil file audio terbaru yang di-download dalam 30 menit terakhir.
 4. Hasil MP4 & thumbnail tersimpan di folder **Downloads/Klipin**.
 
 Keamanan: server hanya mendengarkan di `127.0.0.1` dan hanya menerima permintaan dari extension Klipin.
