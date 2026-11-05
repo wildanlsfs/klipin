@@ -86,7 +86,7 @@ async function setFileInput(tabId, files, kind) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg?.type === 'TUYUL_SET_FILE' && !sender.tab) { // hanya dari panel Klipin
+  if (msg?.type === 'TUYUL_SET_FILE' && sender.url?.startsWith(chrome.runtime.getURL('sidepanel.html'))) { // hanya dari panel Klipin (side panel atau tab)
     setFileInput(msg.tabId, msg.files, msg.kind)
       .then(() => sendResponse({ ok: true }))
       .catch((e) => sendResponse({ ok: false, error: e.message }));
