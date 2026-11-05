@@ -29,7 +29,7 @@ function requestOrigins(bases) {
  */
 export function mountSettings(root, { onSaved, onCancel } = {}) {
   let draft = null; // salinan pengaturan yang sedang diedit
-  let rules = null; // { script: [...], scene: [...] } daftar aturan efektif yang sedang diedit
+  let rules = null; // { script: [...], scene: [...], thumb: [...] } daftar aturan efektif yang sedang diedit
   let styles = null; // gaya visual efektif yang sedang diedit
 
   const taskMap = h('div', { class: 'task-map' });
@@ -61,9 +61,10 @@ export function mountSettings(root, { onSaved, onCancel } = {}) {
       elevenKey,
       elevenBox),
     h('h3', { class: 'sec' }, '✍️ Aturan prompt'),
-    h('p', { class: 'hint' }, 'Aturan yang dikirim ke AI saat menulis naskah dan prompt gambar. Matikan, ubah teksnya, atau tambah aturan sendiri. Aturan bawaan yang tidak kamu ubah ikut diperbarui saat Klipin update.'),
+    h('p', { class: 'hint' }, 'Aturan yang dikirim ke AI saat menulis naskah, prompt gambar, dan konsep thumbnail. Matikan, ubah teksnya, atau tambah aturan sendiri. Aturan bawaan yang tidak kamu ubah ikut diperbarui saat Klipin update.'),
     rulesCard('script', '📝 Naskah'),
     rulesCard('scene', '🖼️ Prompt gambar (scene)'),
+    rulesCard('thumb', '🎯 Thumbnail'),
     h('h3', { class: 'sec' }, '🎨 Gaya visual'),
     h('details', { class: 'card' },
       h('summary', {}, 'Prompt gaya visual'),
@@ -250,6 +251,7 @@ export function mountSettings(root, { onSaved, onCancel } = {}) {
     cards.replaceChildren(providerCard('gemini'), ...draft.compat.map(providerCard));
     renderRules('script');
     renderRules('scene');
+    renderRules('thumb');
     renderStyles();
     renderTaskMap();
     autoLoadModels();
@@ -322,7 +324,7 @@ export function mountSettings(root, { onSaved, onCancel } = {}) {
   return {
     load(settings) {
       draft = structuredClone(settings);
-      rules = { script: llm.rulesFor(draft, 'script'), scene: llm.rulesFor(draft, 'scene') };
+      rules = { script: llm.rulesFor(draft, 'script'), scene: llm.rulesFor(draft, 'scene'), thumb: llm.rulesFor(draft, 'thumb') };
       styles = llm.visualStyles({ ...draft, customStyles: [] }).concat((draft.customStyles || []).map((v) => ({ ...v, builtin: false })));
       fillSelect(addPreset, Object.entries(llm.PRESETS).map(([k, p]) => [k, p.name]), 'openai');
       render();

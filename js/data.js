@@ -183,6 +183,70 @@ export const DURATIONS = [1, 2, 3, 5, 8, 10, 15];
 // id: diukur dari video Klipin (Gemini TTS, jeda dipotong) ±160 kata/menit; diambil sedikit di bawahnya.
 export const WPM = { id: 150, en: 150 };
 
+// Jenis thumbnail. AI membuat konsep (teks + prompt gambar) sesuai jenis yang dipilih, dengan
+// aturan teks & komposisi di bawah. "formats" = format naskah yang paling cocok (direkomendasikan).
+// layout: 'side' = teks di satu sisi, 'split' = dua sisi bertolak belakang (teks "A | B"), 'bottom' = teks di bawah.
+export const THUMB_TYPES = [
+  {
+    id: 'kontras', emoji: '⚖️', label: 'Dua Hasil Bertolak Belakang', layout: 'split',
+    hint: 'Gambar dibelah dua: hal yang sama, hasil berlawanan. Penonton penasaran "kok bisa beda?"',
+    text: 'Dua bagian pendek dipisah " | " (kiri = hasil buruk, kanan = hasil baik), masing-masing 1–3 kata, sebaiknya angka dari naskah (contoh: "−2 JUTA | +5 JUTA"). Jangan jelaskan penyebabnya.',
+    image: 'Split composition: the SAME subject shown twice side by side (top/bottom for vertical), left side = the bad outcome (worried expression, muted colors), right side = the good outcome (happy, bright colors). The only visible difference is the cause explained in the video (e.g. bought feed vs own grass). Clear divider in the middle, empty band at the top of each half for text.',
+    formats: ['explainer', 'investigasi', 'listicle'],
+  },
+  {
+    id: 'reaksi', emoji: '😱', label: 'Ekspresi Kaget', layout: 'side',
+    hint: 'Satu tokoh bereaksi kuat pada benda/angka kunci. Emosi yang menular.',
+    text: '2–4 kata berupa pertanyaan tajam atau angka mengejutkan dari naskah yang membuat tokoh kaget (contoh: "RUGI 2 JUTA?"). Jangan menjawab pertanyaan di judul.',
+    image: 'One character, large in frame (chest-up), with an extreme readable expression (shock, disbelief) looking at the ONE key object of the video (a calculator, a bill, an animal, a tool) held or placed in the foreground. Simple background related to the topic, strong lighting contrast, empty area on the text side.',
+    formats: ['explainer', 'investigasi', 'bagaimana-jika', 'misteri'],
+  },
+  {
+    id: 'angka', emoji: '🔢', label: 'Angka Besar', layout: 'side',
+    hint: 'Angka paling mengejutkan dari video jadi teks utama, gambar menunjukkan wujud angkanya.',
+    text: 'Angka/satuan paling mengejutkan yang BENAR-BENAR ada di naskah, maks 3 kata (contoh: "10 EKOR = ?", "Rp36 JUTA"). Tanpa kata sifat berlebihan.',
+    image: 'Show the number physically: a pile, a row, a stack or a scale of the real objects from the video (e.g. ten goats in a row, a stack of money), arranged so the quantity is obvious at a glance. One focal group, clean background, empty area on the text side.',
+    formats: ['explainer', 'listicle', 'kronologi'],
+  },
+  {
+    id: 'misteri', emoji: '❓', label: 'Objek Misterius', layout: 'side',
+    hint: 'Sesuatu yang disembunyikan atau setengah terlihat. Cocok untuk cerita dan misteri.',
+    text: '2–4 kata yang membuka pertanyaan tanpa menjawab, boleh diakhiri "?" atau "…" (contoh: "INI YANG DISEMBUNYIKAN"). Jangan menyebut jawabannya.',
+    image: 'One mysterious element partly hidden (silhouette, behind a cloth, in shadow, seen through a crack) with a character pointing at or staring at it. Dark surroundings with a single strong light on the hidden object, empty dark area on the text side.',
+    formats: ['misteri', 'investigasi', 'kronologi', 'penemuan'],
+  },
+  {
+    id: 'momen', emoji: '🎬', label: 'Momen Klimaks', layout: 'bottom',
+    hint: 'Membekukan detik paling dramatis dari cerita, sebelum akibatnya terlihat.',
+    text: '2–4 kata yang menandai titik waktu atau taruhan (contoh: "DETIK TERAKHIR", "SEBELUM SEMUA HILANG"). Jangan bocorkan akhir cerita.',
+    image: 'Freeze the single most dramatic moment of the story just BEFORE the outcome: action in motion, dynamic angle, a clear threat or turning point visible, the main character reacting. Cinematic lighting, empty band at the bottom for text.',
+    formats: ['kronologi', 'bagaimana-jika', 'penemuan', 'biografi'],
+  },
+  {
+    id: 'tokoh', emoji: '🧑', label: 'Potret Tokoh', layout: 'side',
+    hint: 'Tokoh utama di titik balik hidupnya, dengan satu benda simbol ceritanya.',
+    text: '2–4 kata tentang titik balik atau ironi hidup tokoh (contoh: "JENIUS TAPI MISKIN"). Bukan nama tokoh saja.',
+    image: 'Portrait of the main figure of the story (stylized illustration, not a photo of a real person) at the turning point of their life, holding or next to ONE object that symbolizes the story, intense eye contact with the viewer, simple period-appropriate background, empty area on the text side.',
+    formats: ['biografi', 'penemuan'],
+  },
+  {
+    id: 'daftar', emoji: '🏆', label: 'Nomor Satu Tersembunyi', layout: 'side',
+    hint: 'Beberapa pilihan ditampilkan, yang paling penting ditutupi. Untuk video daftar/perbandingan.',
+    text: '2–4 kata yang menantang menebak (contoh: "NOMOR 1 TAK TERDUGA", "PILIH MANA?"). Jangan sebut jawabannya.',
+    image: 'Three to four options from the video lined up (objects, animals or places), the most important one covered with a question-mark shape made of objects or hidden in shadow, a character choosing between them. Clean background, empty area on the text side.',
+    formats: ['listicle', 'explainer'],
+  },
+];
+
+// Nada teks thumbnail mengikuti gaya narasi.
+export const THUMB_TONE = {
+  dokumenter: 'serius dan faktual, tanpa tanda seru berlebihan',
+  santai: 'santai seperti bicara ke teman, boleh bahasa sehari-hari',
+  storytelling: 'dramatis, membangun ketegangan',
+  misterius: 'misterius, menggantung, mengundang tanya',
+  edukatif: 'jelas dan menantang rasa ingin tahu, sering memakai angka',
+};
+
 export const VISUAL_STYLES = [
   {
     id: 'stickman', label: 'Stickman Putih', emoji: '✏️',

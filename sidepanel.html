@@ -284,6 +284,15 @@
           </div>
           <canvas id="thumbCanvas" width="1280" height="720"></canvas>
 
+          <label>Jenis thumbnail <span class="meta" id="thumbTypesMeta"></span></label>
+          <div class="chips" id="thumbTypes"></div>
+          <p class="hint" id="thumbTypeHint"></p>
+          <button class="btn" id="thumbConceptBtn">✨ Buat konsep thumbnail</button>
+          <div class="concepts" id="thumbConcepts"></div>
+          <button class="btn hidden" id="thumbConceptFlowBtn">🌊 Buat gambar semua konsep di Flow</button>
+
+          <details class="manual" id="thumbManual">
+          <summary class="hint">Atur manual: teks, posisi, warna, latar</summary>
           <label for="thumbText">Teks thumbnail</label>
           <div class="chips" id="ytThumbTexts"></div>
           <input type="text" id="thumbText" placeholder="2–4 kata, mis. RAHASIA TERKUBUR" />
@@ -294,6 +303,7 @@
                 <button data-v="left">Kiri</button>
                 <button data-v="right">Kanan</button>
                 <button data-v="bottom">Bawah</button>
+                <button data-v="split" title="Teks dua sisi: tulis A | B">Dua sisi</button>
               </div>
             </div>
             <div>
@@ -315,6 +325,7 @@
           <details>
             <summary class="hint">Prompt latar thumbnail (untuk Flow)</summary>
             <textarea id="thumbPrompt" rows="4"></textarea>
+          </details>
           </details>
           <button class="btn primary" id="thumbDlBtn">⬇ Download Thumbnail (JPG)</button>
         </div>

@@ -124,12 +124,18 @@ const TOOLS = [
     inputSchema: obj(),
   },
   {
+    name: 'klipin_thumb_concepts',
+    description: 'Ask the AI for thumbnail concepts that fit the project (story format, narration style, visual style): one concept per thumbnail type, each with an idea, a 2–4 word text and a Flow image prompt following the user\'s thumbnail rules. Types: kontras (split: two opposite results, text "A | B"), reaksi (shocked character), angka (big number), misteri (hidden object), momen (climax moment), tokoh (portrait), daftar (hidden number one). Omit types to use the ones recommended for the format (see klipin_options).',
+    inputSchema: obj({ types: { type: 'array', items: { type: 'string' }, description: '1–4 thumbnail type ids' } }),
+  },
+  {
     name: 'klipin_thumbnail',
     description: 'Compose a YouTube thumbnail sized to the project ratio (16:9 → 1280x720, 9:16 → 1080x1920, 1:1 → 1080x1080) (background image + big text), save it as JPG to Downloads/Klipin and return a preview.',
     inputSchema: obj({
-      text: str('2–4 word thumbnail text (default: first suggestion from klipin_youtube)'),
+      concept: { type: 'integer', description: 'Use concept N from klipin_thumb_concepts (its text, layout, color and image; generates the image in Google Flow if it has none — 1 Flow credit)' },
+      text: str('2–4 word thumbnail text (default: first suggestion from klipin_youtube); for the split layout write "A | B"'),
       background: str('"scene:N" to use scene N\'s image, "flow" to generate a new background in Google Flow, or omit to keep the current one'),
-      position: str('Text position', { enum: ['left', 'right', 'bottom'] }),
+      position: str('Text position ("split" = two sides, text "A | B")', { enum: ['left', 'right', 'bottom', 'split'] }),
       color: str('Text accent color', { enum: ['yellow', 'white', 'red'] }),
     }),
   },
@@ -148,7 +154,8 @@ const TOOLS = [
 const INSTRUCTIONS = `Klipin makes faceless YouTube videos inside the user's Chrome (extension "Klipin").
 Typical flow: klipin_status → klipin_titles (or klipin_set_title) → klipin_write_script → voice-over
 (klipin_voice if a TTS key is set, otherwise ask the user to create it free in Google AI Studio and give you the file path → klipin_load_audio)
-→ klipin_scenes → klipin_images (needs a Google Flow project open in Chrome) → klipin_render → klipin_youtube → klipin_thumbnail.
+→ klipin_scenes → klipin_images (needs a Google Flow project open in Chrome) → klipin_render → klipin_youtube
+→ klipin_thumb_concepts (pick the concept that creates the most curiosity) → klipin_thumbnail concept=N.
 Long tasks return a job_id: keep calling klipin_wait until done. Answer the user in their language (often Indonesian).`;
 
 // Tool yang boleh jalan bersamaan dengan tugas lain (hanya membaca).

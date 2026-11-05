@@ -1,6 +1,6 @@
 import {
   IDEA_BANK, FORMATS, NARRATION_STYLES, DURATIONS, WPM, RATIOS, VOICES,
-  AI_STUDIO_TTS_URL, FLOW_URL,
+  AI_STUDIO_TTS_URL, FLOW_URL, THUMB_TYPES,
 } from './data.js';
 import * as llm from './llm.js';
 import * as audioLib from './audio.js';
@@ -892,16 +892,21 @@ async function renderVideo(fileHandle = null, onProgress = () => {}) {
 $('#cancelRenderBtn').addEventListener('click', () => renderAbort?.abort());
 
 // ---------------------------------------------------------------- step 6: paket YouTube
-// S.yt = { titles, title, desc, tags, thumbTexts, thumbPrompt, bgs: [dataURL], thumb: { text, pos, color, bg } }
-// thumb.bg: 'g<n>' = latar buatan Flow/upload (S.yt.bgs[n]), 's<i>' = gambar scene nomor i.
+// S.yt = { titles, title, desc, tags, thumbTexts, thumbPrompt, bgs: [dataURL], thumb: { text, pos, color, bg },
+//          thumbTypes: [id], concepts: [{ type, idea, text, color, prompt, image }], conceptSel }
+// thumb.bg: 'g<n>' = latar buatan Flow/upload (S.yt.bgs[n]), 's<i>' = gambar scene nomor i, 'c<k>' = gambar konsep k.
 
 // Ukuran thumbnail mengikuti rasio proyek (Shorts 9:16 → thumbnail vertikal).
 const thumbSize = () => (S.ratio === '9:16' ? { w: 1080, h: 1920 } : S.ratio === '1:1' ? { w: 1080, h: 1080 } : { w: 1280, h: 720 });
 const THUMB_COLORS = { yellow: '#ffd400', white: '#ffffff', red: '#ff2d2d' };
+const SPLIT_COLORS = ['#ff3b3b', '#3ddc63']; // teks dua sisi: kiri/atas = hasil buruk, kanan/bawah = hasil baik
 
 function ensureYt() {
   S.yt ||= { titles: [], title: '', desc: '', tags: '', thumbTexts: [], thumbPrompt: '', bgs: [], thumb: {} };
   S.yt.thumb = { text: '', pos: 'left', color: 'yellow', bg: '', ...S.yt.thumb };
+  S.yt.thumbTypes ||= [];
+  S.yt.concepts ||= [];
+  S.yt.conceptSel ??= -1;
   return S.yt;
 }
 
@@ -976,6 +981,8 @@ function renderYt() {
   updateYtMeta();
   renderThumbBgs();
   thumbSegs.forEach((f) => f());
+  renderThumbTypes();
+  renderConcepts();
   drawThumb();
 }
 
@@ -1004,14 +1011,15 @@ $('#ytCopyTags').addEventListener('click', () => copy(ensureYt().tags, 'Tag'));
 function thumbBgList() {
   const yt = ensureYt();
   return [
+    ...yt.concepts.map((c, k) => c.image && { key: `c${k}`, src: c.image, label: `konsep ${k + 1}` }).filter(Boolean),
     ...yt.bgs.map((src, n) => ({ key: `g${n}`, src, label: 'latar' })),
     ...S.scenes.filter((x) => x.image).map((x) => ({ key: `s${x.i}`, src: x.image, label: `scene ${x.i}` })),
   ];
 }
 
-function currentBg() {
+function currentBg(key = ensureYt().thumb.bg) {
   const list = thumbBgList();
-  return list.find((b) => b.key === ensureYt().thumb.bg) || list[0] || null;
+  return list.find((b) => b.key === key) || list[0] || null;
 }
 
 function renderThumbBgs() {
@@ -1057,12 +1065,11 @@ function layoutThumbText(ctx, text, boxW, boxH) {
 }
 
 let drawSeq = 0;
-async function drawThumb(canvas = $('#thumbCanvas')) {
+async function drawThumb(canvas = $('#thumbCanvas'), spec = ensureYt().thumb) {
   const onScreen = canvas === $('#thumbCanvas');
   const seq = onScreen ? ++drawSeq : drawSeq;
-  const yt = ensureYt();
-  const { text, pos, color } = yt.thumb;
-  const bg = currentBg();
+  const { text, pos, color } = spec;
+  const bg = currentBg(spec.bg);
   const im = bg ? await loadImg(bg.src).catch(() => null) : null;
   if (onScreen && seq !== drawSeq) return; // ada gambar yang lebih baru
   if (onScreen) {
@@ -1082,6 +1089,7 @@ async function drawThumb(canvas = $('#thumbCanvas')) {
     ctx.drawImage(im, (W - dw) * fx, (H - dh) * 0.4, dw, dh);
   }
   if (!text.trim()) return;
+  if (pos === 'split') return drawSplitText(ctx, text, W, H, tall);
 
   // gelapkan sisi teks supaya terbaca
   const g = pos === 'bottom' ? ctx.createLinearGradient(0, H, 0, H * (tall ? 0.5 : 0.35))
@@ -1119,6 +1127,45 @@ async function drawThumb(canvas = $('#thumbCanvas')) {
   });
 }
 
+function strokeFill(ctx, l, x, y, size, fill) {
+  ctx.shadowColor = 'rgba(0,0,0,.6)';
+  ctx.shadowBlur = 24;
+  ctx.shadowOffsetY = 6;
+  ctx.lineWidth = Math.max(8, size * 0.12);
+  ctx.strokeStyle = '#000';
+  ctx.lineJoin = 'round';
+  ctx.strokeText(l, x, y);
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = fill;
+  ctx.fillText(l, x, y);
+}
+
+// Teks dua sisi "A | B": 16:9 → di atas belahan kiri & kanan; vertikal → di atas bagian atas & bawah.
+function drawSplitText(ctx, text, W, H, tall) {
+  const parts = text.split('|').map((x) => x.trim()).filter(Boolean).slice(0, 2);
+  if (parts.length < 2) parts.push('');
+  const pad = 40;
+  const boxes = tall
+    ? [{ x: 0, y: H * 0.06, w: W, h: H * 0.16 }, { x: 0, y: H * 0.53, w: W, h: H * 0.16 }]
+    : [{ x: 0, y: pad, w: W / 2, h: H * 0.36 }, { x: W / 2, y: pad, w: W / 2, h: H * 0.36 }];
+  boxes.forEach((b, k) => {
+    const g = ctx.createLinearGradient(0, b.y - pad, 0, b.y + b.h + pad);
+    g.addColorStop(0, 'rgba(0,0,0,.7)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(b.x, Math.max(0, b.y - pad), b.w, b.h + pad * 2);
+    if (!parts[k]) return;
+    const { size, lines, lh } = layoutThumbText(ctx, parts[k], b.w - pad * 2, b.h);
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'center';
+    lines.forEach((l, n) => strokeFill(ctx, l, b.x + b.w / 2, b.y + n * lh, size, SPLIT_COLORS[k]));
+  });
+  // garis pemisah tipis di tengah
+  ctx.fillStyle = 'rgba(255,255,255,.85)';
+  if (tall) ctx.fillRect(0, H / 2 - 3, W, 6);
+  else ctx.fillRect(W / 2 - 3, 0, 6, H);
+}
+
 async function addThumbBg(src) {
   const yt = ensureYt();
   yt.bgs.unshift(await normalizeImage(src, 1600));
@@ -1154,6 +1201,147 @@ async function thumbBgFromFlow() {
   const outs = res.images?.length ? res.images : [res];
   for (const o of outs.reverse()) await addThumbBg(o.image || o.url).catch(() => {});
   return outs.length;
+}
+
+// ---- konsep thumbnail: jenis mengikuti format & gaya narasi proyek, AI membuat teks + prompt per jenis
+const thumbType = (id) => THUMB_TYPES.find((t) => t.id === id);
+const recommendedTypes = () => THUMB_TYPES.filter((t) => t.formats.includes(S.format)).map((t) => t.id);
+const layoutPos = (t) => (t?.layout === 'split' ? 'split' : t?.layout === 'bottom' ? 'bottom' : 'left');
+
+function selectedTypes() {
+  const yt = ensureYt();
+  if (!yt.thumbTypes.length) yt.thumbTypes = (recommendedTypes().length ? recommendedTypes() : ['kontras', 'reaksi', 'angka']).slice(0, 3);
+  return yt.thumbTypes;
+}
+
+function renderThumbTypes() {
+  const yt = ensureYt();
+  const sel = selectedTypes();
+  const rec = recommendedTypes();
+  $('#thumbTypesMeta').textContent = `⭐ cocok untuk format "${fmtStyle().label}" · pilih 1–4`;
+  $('#thumbTypes').replaceChildren(...THUMB_TYPES.map((t) => h('button', {
+    class: `chip ${sel.includes(t.id) ? 'active' : ''} ${rec.includes(t.id) ? 'rec' : ''}`,
+    title: t.hint,
+    onclick: () => {
+      yt.thumbTypes = sel.includes(t.id) ? sel.filter((x) => x !== t.id) : [...sel, t.id].slice(-4);
+      if (!yt.thumbTypes.length) yt.thumbTypes = [t.id];
+      renderThumbTypes();
+      save();
+    },
+  }, `${t.emoji} ${t.label}`)));
+  $('#thumbTypeHint').textContent = yt.thumbTypes.map((id) => `${thumbType(id).emoji} ${thumbType(id).hint}`).join(' ');
+}
+
+const conceptSpec = (c, k) => ({ text: c.text, pos: layoutPos(thumbType(c.type)), color: c.color, bg: c.image ? `c${k}` : ensureYt().thumb.bg });
+
+function renderConcepts() {
+  const yt = ensureYt();
+  const tall = S.ratio === '9:16';
+  $('#thumbConceptFlowBtn').classList.toggle('hidden', !yt.concepts.some((c) => !c.image));
+  $('#thumbConceptFlowBtn').textContent = `🌊 Buat gambar ${yt.concepts.filter((c) => !c.image).length} konsep di Flow (1 kredit per gambar)`;
+  $('#thumbConcepts').replaceChildren(...yt.concepts.map((c, k) => {
+    const t = thumbType(c.type);
+    const { w, h: hh } = thumbSize();
+    const cv = h('canvas', { width: w, height: hh }); // ukuran asli supaya teks sama seperti hasil akhir; diperkecil lewat CSS
+    drawThumb(cv, conceptSpec(c, k)).catch(() => {});
+    const text = h('input', {
+      type: 'text', value: c.text, title: t.layout === 'split' ? 'Tulis dua sisi: A | B' : 'Teks thumbnail',
+      onclick: (e) => e.stopPropagation(),
+      oninput: (e) => {
+        c.text = e.target.value;
+        drawThumb(cv, conceptSpec(c, k));
+        if (yt.conceptSel === k) { yt.thumb.text = c.text; $('#thumbText').value = c.text; renderThumbTexts(); drawThumb(); }
+        save();
+      },
+    });
+    return h('div', { class: `concept ${tall ? 'tall' : ''} ${yt.conceptSel === k ? 'active' : ''}`, onclick: () => applyConcept(k) },
+      cv,
+      h('div', {},
+        h('b', {}, `${t.emoji} ${t.label}`),
+        h('p', {}, c.idea),
+        text,
+        h('div', { class: 'row' },
+          h('button', {
+            class: 'btn', title: c.prompt,
+            onclick: (e) => { e.stopPropagation(); busy(e.currentTarget, '⏳ Flow…', async () => { await conceptImages([k]); applyConcept(k); }); },
+          }, c.image ? '🔄 Gambar ulang' : '🌊 Buat gambar'),
+          h('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); applyConcept(k); } }, yt.conceptSel === k ? '✓ Dipakai' : 'Pakai'))));
+  }));
+}
+
+function applyConcept(k) {
+  const yt = ensureYt();
+  const c = yt.concepts[k];
+  if (!c) return;
+  yt.conceptSel = k;
+  yt.thumb = { ...yt.thumb, ...conceptSpec(c, k) };
+  yt.thumbPrompt = c.prompt;
+  $('#thumbText').value = yt.thumb.text;
+  $('#thumbPrompt').value = yt.thumbPrompt;
+  thumbSegs.forEach((f) => f());
+  renderThumbTexts();
+  renderThumbBgs();
+  renderConcepts();
+  drawThumb();
+  save();
+}
+
+async function makeThumbConcepts(types = selectedTypes()) {
+  if (!S.script.trim() && !S.scenes.length) throw new Error('Naskah masih kosong (langkah 2).');
+  const yt = ensureYt();
+  const concepts = await llm.thumbConcepts(settings, {
+    title: yt.title || S.title || S.rawTitle,
+    script: S.script || S.scenes.map((x) => x.text).join(' '),
+    format: fmtStyle(), narrStyle: narrStyle(), visualStyle: visualStyle(), ratio: S.ratio, lang: S.lang, types,
+  });
+  if (!concepts.length) throw new Error('AI tidak mengembalikan konsep thumbnail. Coba lagi.');
+  yt.concepts = concepts;
+  yt.conceptSel = -1;
+  renderConcepts();
+  applyConcept(0);
+  return concepts;
+}
+
+$('#thumbConceptBtn').addEventListener('click', (e) => busy(e.currentTarget, '⏳ Menyusun konsep…', async () => {
+  const n = (await makeThumbConcepts()).length;
+  toast(`${n} konsep thumbnail ✓ — klik "Buat gambar" untuk latarnya`, 'ok');
+}));
+
+$('#thumbConceptFlowBtn').addEventListener('click', (e) => busy(e.currentTarget, '⏳ Membuat gambar di Flow…', async () => {
+  const todo = ensureYt().concepts.map((c, k) => (!c.image ? k : -1)).filter((k) => k >= 0);
+  const n = await conceptImages(todo);
+  toast(`${n} gambar konsep dari Flow ✓`, 'ok');
+}));
+
+// Gambar latar untuk konsep nomor ks (dikirim ke Flow sekaligus; Flow memproses hingga 5 prompt bersamaan).
+async function conceptImages(ks) {
+  const yt = ensureYt();
+  const c = await checkFlow();
+  if (!c.ok) throw new Error(`Flow: ${c.reason}`);
+  if (!c.tab.active) await chrome.tabs.update(c.tab.id, { active: true }).catch(() => {});
+  await configureFlow(c.tab.id);
+  let done = 0;
+  const errors = [];
+  await Promise.all(ks.map(async (k) => {
+    const concept = yt.concepts[k];
+    let res;
+    for (let waits = 0; waits < 150; waits++) {
+      res = await chrome.tabs.sendMessage(c.tab.id, { type: 'TUYUL_FLOW_GENERATE', prompt: concept.prompt, label: `Thumbnail ${k + 1}`, count: 1 })
+        .catch((e) => ({ ok: false, error: errMsg(e) }));
+      if (res?.ok || !/sedang memproses/i.test(res?.error || '')) break;
+      await new Promise((r) => setTimeout(r, 2000)); // antre di Flow
+    }
+    if (!res?.ok) { errors.push(`konsep ${k + 1}: ${res?.error || 'gagal'}`); return; }
+    const o = res.images?.[0] || res;
+    concept.image = await normalizeImage(o.image || o.url, 1600);
+    done++;
+    renderConcepts();
+    save();
+  }));
+  if (yt.conceptSel >= 0) applyConcept(yt.conceptSel);
+  if (!done && errors.length) throw new Error(`Flow gagal membuat gambar (${errors.join('; ')}).`);
+  if (errors.length) toast(`Sebagian gagal: ${errors.join('; ')}`, 'err');
+  return done;
 }
 
 async function thumbBlob() {
@@ -1291,6 +1479,7 @@ const agentTools = {
         `visual_style: ${llm.visualStyles(settings).map((v) => `${v.id} (${v.label})`).join(', ')}`,
         `ratio: ${RATIOS.map((r) => r.id).join(', ')}`,
         `minutes: ${DURATIONS.join(', ')}`,
+        `thumbnail types (klipin_thumb_concepts; ⭐ = cocok untuk format proyek ini): ${THUMB_TYPES.map((t) => `${t.id}${recommendedTypes().includes(t.id) ? '⭐' : ''} (${t.label})`).join(', ')}`,
         `TTS engine: ${ttsLines.join(', ')}`,
         `Suara Gemini: ${VOICES.map((v) => `${v.name} (${v.gender === 'L' ? 'pria' : 'wanita'}, ${v.desc})`).join('; ')}`,
         `Suara OpenAI: ${llm.OPENAI_VOICES.map((v) => v.id).join(', ')}`,
@@ -1445,12 +1634,34 @@ const agentTools = {
     };
   },
 
-  async thumbnail({ text, background, position, color }, progress) {
+  async thumb_concepts({ types }, progress) {
+    go(6);
+    const list = (Array.isArray(types) ? types : String(types || '').split(/[\s,]+/)).filter((id) => thumbType(id));
+    if (list.length) ensureYt().thumbTypes = list.slice(0, 4);
+    progress('menyusun konsep thumbnail…');
+    const concepts = await makeThumbConcepts(selectedTypes());
+    return {
+      text: `Konsep thumbnail (format ${fmtStyle().label}, gaya narasi ${narrStyle().label}). Pakai dengan klipin_thumbnail concept=N:\n${concepts.map((c, k) => `${k + 1}. [${c.type}] teks "${c.text}" · warna ${c.color}\n   ide: ${c.idea}\n   prompt: ${c.prompt}`).join('\n')}`,
+    };
+  },
+
+  async thumbnail({ text, background, position, color, concept }, progress) {
     go(6);
     const yt = ensureYt();
+    if (concept) {
+      const k = Number(concept) - 1;
+      if (!yt.concepts[k]) throw new Error(`Konsep ${concept} tidak ada — panggil klipin_thumb_concepts dulu.`);
+      if (!yt.concepts[k].image || background === 'flow') {
+        progress(`membuat gambar konsep ${concept} di Google Flow…`);
+        await conceptImages([k]);
+      }
+      if (text) yt.concepts[k].text = String(text);
+      applyConcept(k);
+      background = background === 'flow' ? '' : background;
+    }
     if (text) yt.thumb.text = String(text);
     if (!yt.thumb.text) yt.thumb.text = yt.thumbTexts[0] || (S.title || '').split(/\s+/).slice(0, 4).join(' ');
-    if (position) yt.thumb.pos = ['left', 'right', 'bottom'].includes(position) ? position : yt.thumb.pos;
+    if (position) yt.thumb.pos = ['left', 'right', 'bottom', 'split'].includes(position) ? position : yt.thumb.pos;
     if (color) yt.thumb.color = THUMB_COLORS[color] ? color : yt.thumb.color;
     const m = /^scene:(\d+)$/.exec(String(background || ''));
     if (m) {

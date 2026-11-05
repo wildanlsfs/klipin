@@ -85,8 +85,13 @@ API key tetap di extension dan tidak dikirim ke agent. Matikan kapan saja lewat 
 5. **Render** – resolusi 1080/720, FPS 24/30, subtitle → *Render MP4* (pilih lokasi simpan). Encode H.264 + AAC via WebCodecs,
    ±115 fps di 1080p (video 3 menit ≈ 40–50 detik).
 6. **YouTube** – *Buat Judul, Deskripsi & Thumbnail*: 5 pilihan judul (≤70 karakter), deskripsi siap tempel dengan hook,
-   **bab/timestamp otomatis dari waktu scene**, hashtag, dan tag (≤500 karakter). Thumbnail (16:9 → 1280×720, Shorts 9:16 → 1080×1920): pilih latar dari gambar scene,
-   upload, atau *Buat latar khusus di Flow*; teks besar 2–4 kata (posisi & warna bisa diatur) → *Download Thumbnail (JPG)*.
+   **bab/timestamp otomatis dari waktu scene**, hashtag, dan tag (≤500 karakter). Thumbnail (16:9 → 1280×720, Shorts 9:16 → 1080×1920):
+   pilih **jenis thumbnail** (⭐ = cocok untuk format cerita proyek): Dua Hasil Bertolak Belakang, Ekspresi Kaget, Angka Besar,
+   Objek Misterius, Momen Klimaks, Potret Tokoh, atau Nomor Satu Tersembunyi. *Buat konsep thumbnail* membuat satu konsep per jenis
+   (ide, teks 2–4 kata, prompt gambar) dari naskah, format, gaya narasi, dan gaya visual proyek; *Buat gambar* membuat latarnya di Flow
+   (1 kredit per gambar, beberapa konsep sekaligus). Bandingkan pratinjaunya, ubah teksnya, lalu *Pakai*. Aturan konsep bisa diatur di
+   ⚙︎ Pengaturan → Aturan prompt → Thumbnail. Teks, posisi (termasuk *Dua sisi* "A | B"), warna, dan latar tetap bisa diatur manual
+   → *Download Thumbnail (JPG)*.
 
 ## Struktur
 - `sidepanel.html/css`, `js/app.js` – UI & alur

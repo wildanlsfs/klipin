@@ -5,7 +5,7 @@
 // - Transkrip: Gemini (audio inline) atau Whisper-compatible (/audio/transcriptions)
 
 import { decodeFile } from './audio.js';
-import { VISUAL_STYLES } from './data.js';
+import { VISUAL_STYLES, THUMB_TYPES, THUMB_TONE } from './data.js';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const ELEVEN_BASE = 'https://api.elevenlabs.io/v1';
@@ -79,6 +79,13 @@ export const DEFAULT_RULES = {
     { id: 'stylefirst', label: 'Gaya di depan', text: 'Selalu awali dengan deskripsi gaya visual di atas agar konsisten.' },
     { id: 'hookimg', label: 'Scene 1 = hook', text: 'Scene 1 adalah hook: buat gambar paling mencolok yang langsung MEMPERLIHATKAN kontras/klaim di narasinya (mis. dua pilihan berdampingan, sebelum–sesudah, perbandingan besar–kecil), bukan suasana pembuka.' },
     { id: 'safe', label: 'Tanpa teks & aman', text: 'Tanpa teks/tulisan/huruf/watermark di gambar. Hindari tokoh nyata yang dikenali, kekerasan grafis, dan konten sensitif.' },
+  ],
+  thumb: [
+    { id: 'gap', label: 'Celah penasaran', text: 'Teks dan gambar melengkapi judul, bukan mengulanginya. Judul memberi topik, thumbnail memberi ketegangan (angka, kontras, atau pertanyaan). Jangan pernah menjawab pertanyaan di judul.' },
+    { id: 'honest', label: 'Jujur sesuai isi', text: 'Setiap angka dan klaim di teks harus ada di naskah. Gambar memperlihatkan hal yang benar-benar dibahas di video, bukan hal yang lebih heboh.' },
+    { id: 'specific', label: 'Subjek spesifik', text: 'Gambar memakai benda, hewan, tempat, atau tokoh yang disebut di naskah (sebutkan namanya di prompt), bukan simbol umum seperti tumpukan koin atau tanda tanya polos.' },
+    { id: 'mobile', label: 'Terbaca di HP', text: 'Satu titik fokus, maks 2 tokoh, ekspresi dan objek besar. Teks maks 4 kata (atau 2×3 kata untuk jenis dua sisi) dan tidak bertumpuk dengan subjek.' },
+    { id: 'notext', label: 'Gambar tanpa tulisan', text: 'Prompt gambar wajib menyebut tanpa teks, huruf, angka, logo, atau watermark di gambar; teks ditambahkan Klipin.' },
   ],
 };
 
@@ -485,6 +492,56 @@ Balas HANYA JSON: {"titles":[],"description":"","chapters":[],"tags":[],"hashtag
     thumbTexts: strs(out.thumbTexts).slice(0, 6),
     thumbPrompt: typeof out.thumbPrompt === 'string' ? out.thumbPrompt.trim() : '',
   };
+}
+
+// Konsep thumbnail: untuk tiap jenis yang dipilih, satu teks + satu prompt latar yang mengikuti isi naskah,
+// format, gaya narasi, dan gaya visual proyek. Hasil: [{ type, idea, text, color, prompt }].
+export async function thumbConcepts(s, { title, script, format, narrStyle, visualStyle, ratio, lang, types }) {
+  const en = lang === 'en';
+  const tall = ratio === '9:16';
+  const list = types.map((id) => THUMB_TYPES.find((t) => t.id === id)).filter(Boolean);
+  const spot = (t) => (t.layout === 'split' ? (tall ? 'atas dan bawah (masing-masing bagian)' : 'atas tiap belahan')
+    : t.layout === 'bottom' ? (tall ? 'bawah (di atas 15% terbawah)' : 'bawah') : tall ? 'atas' : 'kiri');
+  const out = await generateJSON(s, 'youtube', `Kamu adalah desainer thumbnail YouTube untuk channel faceless. Tugasmu membuat konsep thumbnail yang membuat orang PENASARAN untuk mengklik, tanpa menipu.
+
+Video:
+- Judul: "${title}"
+- Format cerita: ${format.label} (${format.hint})
+- Gaya narasi: ${narrStyle.label}; nada teks thumbnail: ${THUMB_TONE[narrStyle.id] || 'sesuai gaya narasi'}
+- Rasio: ${ratio || '16:9'}${tall ? ' (vertikal, Shorts)' : ''}
+- Gaya visual (WAJIB sama dengan video): ${visualStyle.prompt}
+
+Naskah:
+${script.slice(0, 6000)}
+
+Buat SATU konsep untuk setiap jenis berikut, persis sesuai aturannya:
+${list.map((t, k) => `${k + 1}. "${t.id}" (${t.label})
+   Teks: ${t.text}
+   Gambar: ${t.image}
+   Ruang kosong untuk teks: ${spot(t)}.`).join('
+')}
+
+Aturan untuk semua konsep:
+${ruleLines(s, 'thumb', null)}
+
+Isi tiap konsep:
+- "type": id jenisnya.
+- "idea": 1 kalimat ${en ? 'English' : 'Bahasa Indonesia'} untuk pengguna: kenapa konsep ini bikin penasaran dan apa yang terlihat.
+- "text": teks thumbnail ${en ? 'English' : 'Bahasa Indonesia'} sesuai aturan jenisnya.
+- "color": warna aksen teks: "yellow", "white", atau "red".
+- "prompt": prompt gambar Bahasa Inggris 2–4 kalimat: diawali gaya visual di atas, lalu subjek spesifik dari naskah, komposisi sesuai jenis, ekspresi, pencahayaan, ruang kosong untuk teks, dan "no text, no letters, no numbers, no logos, no watermark".
+
+Balas HANYA JSON: {"concepts":[{"type":"","idea":"","text":"","color":"","prompt":""}]}`,
+  (o) => Array.isArray(o.concepts) && o.concepts.length);
+  return out.concepts
+    .filter((c) => c && typeof c.text === 'string' && typeof c.prompt === 'string' && list.some((t) => t.id === c.type))
+    .map((c) => ({
+      type: c.type,
+      idea: String(c.idea || '').trim(),
+      text: c.text.trim(),
+      color: ['yellow', 'white', 'red'].includes(c.color) ? c.color : 'yellow',
+      prompt: c.prompt.trim(),
+    }));
 }
 
 export async function characterBible(s, { title, script, visualStyle }) {
