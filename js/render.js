@@ -127,6 +127,101 @@ function drawSubtitle(ctx, text, w, h) {
   });
 }
 
+// Teks hook besar di detik-detik pertama (frame yang dilihat orang saat menggulir feed).
+// "A | B" = dua sisi kontras (merah | hijau); selain itu baris pertama kuning, sisanya putih.
+const HOOK_FONT = (size) => `900 ${size}px Impact, "Anton", "Arial Black", "Helvetica Neue", sans-serif`;
+const hookCase = (t) => t.toUpperCase().replace(/\bRP(?=\s?\d)/g, 'Rp'); // "Rp100", bukan "RP100"
+function fitHook(ctx, text, maxW, maxLines, maxSize) {
+  const words = hookCase(text).split(/\s+/).filter(Boolean);
+  for (let size = maxSize; size >= 28; size -= 4) {
+    ctx.font = HOOK_FONT(size);
+    const lines = wrapLines(ctx, words.join(' '), maxW);
+    if (lines.length <= maxLines && lines.every((l) => ctx.measureText(l).width <= maxW)) return { size, lines };
+  }
+  ctx.font = HOOK_FONT(28);
+  return { size: 28, lines: wrapLines(ctx, words.join(' '), maxW) };
+}
+
+function drawHook(ctx, text, w, h, alpha) {
+  const vertical = h > w;
+  const parts = text.split('|').map((x) => x.trim()).filter(Boolean).slice(0, 2);
+  if (!vertical && parts.length === 2) return drawHookSides(ctx, parts, w, h, alpha);
+  const maxW = w * (vertical ? 0.86 : 0.8);
+  const maxSize = Math.round(vertical ? w * 0.15 : h * 0.16);
+  const blocks = parts.length === 2
+    ? parts.map((p, k) => ({ ...fitHook(ctx, p, maxW, 2, maxSize), colors: [['#ff3b3b'], ['#3ddc63']][k] }))
+    : [{ ...fitHook(ctx, parts[0] || '', maxW, 3, maxSize), colors: ['#ffd400', '#ffffff'] }];
+  const gap = (blocks[0].size || 40) * 0.35;
+  const heights = blocks.map((b) => b.lines.length * b.size * 1.04);
+  const total = heights.reduce((a, b) => a + b, 0) + gap * (blocks.length - 1);
+  // vertikal: di atas (subtitle ada di ±72% tinggi); 16:9: sedikit di atas tengah
+  const top = vertical ? h * 0.14 : (h - total) / 2 - h * 0.08;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const g = ctx.createLinearGradient(0, top - h * 0.08, 0, top + total + h * 0.08);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(0.25, 'rgba(0,0,0,.55)');
+  g.addColorStop(0.75, 'rgba(0,0,0,.55)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, top - h * 0.08, w, total + h * 0.16);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.lineJoin = 'round';
+  let y = top;
+  blocks.forEach((b, n) => {
+    ctx.font = HOOK_FONT(b.size);
+    b.lines.forEach((l, k) => {
+      ctx.lineWidth = Math.max(6, b.size * 0.14);
+      ctx.strokeStyle = '#000';
+      ctx.strokeText(l, w / 2, y);
+      ctx.fillStyle = b.colors[Math.min(k, b.colors.length - 1)];
+      ctx.fillText(l, w / 2, y);
+      y += b.size * 1.04;
+    });
+    if (n < blocks.length - 1) y += gap;
+  });
+  ctx.restore();
+}
+
+// 16:9 dengan dua sisi: berdampingan dalam satu baris, kiri merah | kanan hijau.
+function drawHookSides(ctx, parts, w, h, alpha) {
+  const half = w / 2;
+  const fits = parts.map((p) => fitHook(ctx, p, half * 0.84, 2, Math.round(h * 0.22)));
+  const size = Math.min(...fits.map((f) => f.size)); // dua sisi sama besar
+  const blocks = parts.map((p) => fitHook(ctx, p, half * 0.84, 2, size));
+  const blockH = Math.max(...blocks.map((b) => b.lines.length)) * size * 1.04;
+  const top = h * 0.3 - blockH / 2;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const g = ctx.createLinearGradient(0, top - h * 0.1, 0, top + blockH + h * 0.1);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(0.25, 'rgba(0,0,0,.55)');
+  g.addColorStop(0.75, 'rgba(0,0,0,.55)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, top - h * 0.1, w, blockH + h * 0.2);
+  ctx.fillStyle = 'rgba(255,255,255,.85)';
+  ctx.fillRect(half - 3, top - h * 0.04, 6, blockH + h * 0.08); // garis pemisah
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.lineJoin = 'round';
+  ctx.font = HOOK_FONT(size);
+  blocks.forEach((b, k) => {
+    const y0 = top + (blockH - b.lines.length * size * 1.04) / 2;
+    b.lines.forEach((l, n) => {
+      const x = half * k + half / 2, y = y0 + n * size * 1.04;
+      ctx.lineWidth = Math.max(6, size * 0.14);
+      ctx.strokeStyle = '#000';
+      ctx.strokeText(l, x, y);
+      ctx.fillStyle = k === 0 ? '#ff3b3b' : '#3ddc63';
+      ctx.fillText(l, x, y);
+    });
+  });
+  ctx.restore();
+}
+
 /**
  * @param {object} o
  * @param {Array} o.scenes   scene dengan .image (dataURL) dan .start/.end (detik)
@@ -135,7 +230,7 @@ function drawSubtitle(ctx, text, w, h) {
  */
 const STALL_MS = 20000; // encoder tidak mengeluarkan apa pun selama ini → dianggap macet
 
-export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtitles, fileHandle, onProgress, signal }) {
+export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtitles, hook, fileHandle, onProgress, signal }) {
   const { w, h } = outputSize(ratio, res);
   const usable = scenes.filter((s) => s.image);
   if (!usable.length) throw new RenderError('Belum ada gambar scene.', { hint: 'Buat gambar dulu di langkah 4.' });
@@ -160,7 +255,7 @@ export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtit
     onProgress?.({ phase: 'Menyiapkan audio…', pct: 0 });
     const acfg = audio ? await pickAudioConfig() : null;
     const pcm = acfg ? (await resample(audio, AUDIO_RATE)).samples : null;
-    const job = { w, h, fps, total, timeline, cues, acfg, pcm, fileHandle, onProgress, signal };
+    const job = { w, h, fps, total, timeline, cues, hook: hook?.text?.trim() ? hook : null, acfg, pcm, fileHandle, onProgress, signal };
 
     // Encoder hardware (GPU) lebih cepat, tapi di sebagian laptop Windows driver-nya macet/error.
     // Kalau begitu, ulangi otomatis dengan encoder software.
@@ -185,7 +280,7 @@ export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtit
   }
 }
 
-async function encodeOnce({ w, h, fps, total, timeline, cues, acfg, pcm, fileHandle, onProgress, signal }, hardwareAcceleration) {
+async function encodeOnce({ w, h, fps, total, timeline, cues, hook, acfg, pcm, fileHandle, onProgress, signal }, hardwareAcceleration) {
   onProgress?.({ phase: 'Menyiapkan encoder video…', pct: 0 });
   const vcfg = await pickVideoConfig(w, h, fps, hardwareAcceleration);
 
@@ -283,6 +378,7 @@ async function encodeOnce({ w, h, fps, total, timeline, cues, acfg, pcm, fileHan
         while (ci < cues.length - 1 && t >= cues[ci].end) ci++;
         if (t >= cues[ci].start && t < cues[ci].end) drawSubtitle(ctx, cues[ci].text, w, h);
       }
+      if (hook && t < hook.sec) drawHook(ctx, hook.text, w, h, Math.min(1, (hook.sec - t) / 0.3)); // memudar 0,3 detik terakhir
 
       feedAudioUntil(t + 1);
       const frame = new VideoFrame(canvas, { timestamp: Math.round((f * 1e6) / fps), duration: Math.round(1e6 / fps) });

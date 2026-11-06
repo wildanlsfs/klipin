@@ -543,6 +543,25 @@ Balas HANYA JSON: {"concepts":[{"type":"","idea":"","text":"","color":"","prompt
     }));
 }
 
+// Teks besar untuk 2 detik pertama video: kontras/angka inti dari pembuka naskah, supaya penonton
+// yang sedang menggulir langsung melihat alasan untuk berhenti.
+export async function hookText(s, { title, script, lang }) {
+  const en = lang === 'en';
+  const out = await generateJSON(s, 'youtube', `Video pendek berjudul "${title}". Kalimat pembuka naskahnya:
+${script.split(/\n\s*\n/).slice(0, 2).join('\n').slice(0, 600)}
+
+Tulis teks besar yang tampil di layar selama 2 detik pertama video, supaya orang yang sedang menggulir berhenti.
+Aturan:
+- Ambil kontras atau angka INTI dari kalimat pembuka (bukan dari bagian lain), dan hanya fakta yang ada di naskah.
+- Kalau intinya perbandingan dua angka/hal, tulis dua sisi dipisah " | ", masing-masing 1–3 kata (contoh: "Rp100 RIBU | Rp60 RIBU", "35 HARI | 3 BULAN").
+- Kalau bukan, tulis satu frasa 2–5 kata (contoh: "70% TIDAK SAMPAI KE PETANI").
+- Jangan mengulang judul kata per kata dan jangan menjawab pertanyaannya. Tanpa emoji dan tanpa tanda pagar.
+- Bahasa: ${en ? 'English' : 'Bahasa Indonesia'}.
+
+Balas HANYA JSON: {"text":""}`, (o) => typeof o.text === 'string' && o.text.trim());
+  return out.text.trim().replace(/\s*\|\s*/g, ' | ');
+}
+
 export async function characterBible(s, { title, script, visualStyle }) {
   try {
     const out = await generateJSON(s, 'scene', `Dari naskah video "${title}" berikut, tulis catatan singkat (maks 60 kata, Bahasa Inggris) tentang tokoh utama, tempat, dan era yang akan muncul berulang, supaya gambar antar scene konsisten. Gaya visual: ${visualStyle.label}.

@@ -232,6 +232,14 @@
         </div>
       </div>
       <label class="check"><input type="checkbox" id="subtitles" /> Tampilkan subtitle di video</label>
+      <label class="check"><input type="checkbox" id="hookOn" /> Teks hook besar di 2 detik pertama</label>
+      <div id="hookBox">
+        <div class="row">
+          <input type="text" id="hookText" placeholder="Kosongkan = diusulkan AI saat render. Dua sisi: Rp100 RIBU | Rp60 RIBU" />
+          <button class="btn" id="hookSuggestBtn" style="flex:none">✨ Usulkan</button>
+        </div>
+        <p class="hint">Frame pertama yang dilihat orang saat menggulir. Ambil angka atau kontras inti dari kalimat pembuka.</p>
+      </div>
 
       <div class="summary" id="renderSummary"></div>
       <button class="btn" id="resyncBtn" title="Hitung ulang kapan tiap gambar & subtitle muncul, dicocokkan dengan suara">🔁 Sinkronkan ulang gambar &amp; subtitle dengan audio</button>

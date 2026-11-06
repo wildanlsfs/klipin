@@ -82,7 +82,8 @@ API key tetap di extension dan tidak dikirim ke agent. Matikan kapan saja lewat 
    Bawaannya **5 prompt sekaligus** (pilihan "Kirim sekaligus" 1–5); tiap gambar dicocokkan ke scene lewat teks prompt-nya
    (±10 menit untuk 46 gambar). Tab Flow dijadikan tab aktif selama proses karena Chrome memperlambat tab yang tersembunyi.
    Kalau Flow tetap membuat 2+ gambar per prompt, semuanya disimpan — klik **⇄** di gambar untuk memilih. Scene gagal → ↻ atau ⬆ upload manual.
-5. **Render** – resolusi 1080/720, FPS 24/30, subtitle → *Render MP4* (pilih lokasi simpan). Encode H.264 + AAC via WebCodecs,
+5. **Render** – resolusi 1080/720, FPS 24/30, subtitle, dan **teks hook besar di 2 detik pertama** (angka/kontras inti dari kalimat
+   pembuka, mis. "Rp100 RIBU | Rp60 RIBU"; kosongkan supaya diusulkan AI) → *Render MP4* (pilih lokasi simpan). Encode H.264 + AAC via WebCodecs,
    ±115 fps di 1080p (video 3 menit ≈ 40–50 detik).
 6. **YouTube** – *Buat Judul, Deskripsi & Thumbnail*: 5 pilihan judul (≤70 karakter), deskripsi siap tempel dengan hook,
    **bab/timestamp otomatis dari waktu scene**, hashtag, dan tag (≤500 karakter). Thumbnail (16:9 → 1280×720, Shorts 9:16 → 1080×1920):

@@ -36,6 +36,7 @@ const DEFAULT_STATE = {
   res: 1080,
   fps: 30,
   subtitles: true,
+  hook: { on: true, text: '', auto: '' }, // teks besar 2 detik pertama; auto = awal naskah saat teks diusulkan AI
   yt: null,
 };
 
@@ -804,6 +805,31 @@ $('#resyncBtn').addEventListener('click', () => { resyncScenes(); renderSummary(
 $('#resyncBtn3').addEventListener('click', () => resyncScenes());
 
 $('#subtitles').addEventListener('change', (e) => { S.subtitles = e.target.checked; save(); });
+$('#hookOn').addEventListener('change', (e) => { S.hook.on = e.target.checked; $('#hookBox').classList.toggle('hidden', !S.hook.on); save(); });
+$('#hookText').addEventListener('input', (e) => { S.hook.text = e.target.value; S.hook.auto = ''; save(); });
+$('#hookSuggestBtn').addEventListener('click', (e) => busy(e.currentTarget, '⏳', async () => {
+  await suggestHook();
+  toast('Teks hook diusulkan ✓', 'ok');
+}));
+
+// Teks hook dari AI. Dibuat ulang otomatis kalau naskah berubah, kecuali pengguna sudah mengetik sendiri.
+const hookKey = () => (S.script || S.scenes.map((x) => x.text).join(' ')).slice(0, 300);
+async function suggestHook() {
+  const text = await llm.hookText(settings, { title: S.title || S.rawTitle, script: S.script || S.scenes.map((x) => x.text).join(' '), lang: S.lang });
+  S.hook.text = text;
+  S.hook.auto = hookKey();
+  $('#hookText').value = text;
+  save();
+  return text;
+}
+
+async function hookForRender() {
+  if (!S.hook.on) return null;
+  if (!S.hook.text.trim() || (S.hook.auto && S.hook.auto !== hookKey())) {
+    try { await suggestHook(); } catch (e) { console.warn('[Klipin] teks hook', e); return null; } // tanpa hook kalau AI gagal
+  }
+  return { text: S.hook.text, sec: 2 };
+}
 
 function safeName(s) {
   return (s || 'video').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'video';
@@ -869,8 +895,10 @@ async function renderVideo(fileHandle = null, onProgress = () => {}) {
   $('#resultVideo').classList.add('hidden');
   renderAbort = new AbortController();
   try {
+    $('#renderInfo').textContent = S.hook.on ? 'Menyiapkan teks hook…' : '';
+    const hook = await hookForRender();
     return await renderMp4({
-      scenes: S.scenes, audio: currentAudio(), pauses: audioPauses(), ratio: S.ratio, res: S.res, fps: S.fps, subtitles: S.subtitles,
+      scenes: S.scenes, audio: currentAudio(), pauses: audioPauses(), ratio: S.ratio, res: S.res, fps: S.fps, subtitles: S.subtitles, hook,
       fileHandle, signal: renderAbort.signal,
       onProgress: ({ phase, pct, elapsed }) => {
         setProgress('#renderProgress', pct);
@@ -1045,7 +1073,7 @@ function loadImg(src) {
 
 // Bungkus teks jadi ≤3 baris dengan ukuran huruf sebesar mungkin yang muat di kotak.
 function layoutThumbText(ctx, text, boxW, boxH) {
-  const words = text.toUpperCase().split(/\s+/).filter(Boolean);
+  const words = text.toUpperCase().replace(/\bRP(?=\s?\d)/g, 'Rp').split(/\s+/).filter(Boolean);
   for (let size = 190; size >= 48; size -= 6) {
     ctx.font = `900 ${size}px Impact, "Anton", "Arial Black", "Helvetica Neue", sans-serif`;
     const lines = [];
@@ -1409,7 +1437,7 @@ $('#newProjectBtn').addEventListener('click', async () => {
 async function resetProject() {
   const keep = {
     lang: S.lang, visualStyle: S.visualStyle, ratio: S.ratio, ttsEngine: S.ttsEngine, ttsVoices: S.ttsVoices,
-    res: S.res, fps: S.fps, subtitles: S.subtitles,
+    res: S.res, fps: S.fps, subtitles: S.subtitles, hook: { ...DEFAULT_STATE.hook, on: S.hook?.on !== false },
   };
   S = { ...structuredClone(DEFAULT_STATE), ...keep };
   audioRaw = audioTrim = null;
@@ -1606,8 +1634,13 @@ const agentTools = {
     return { text: `Gambar: ${r?.ok ?? 0} berhasil, ${r?.fail ?? 0} gagal. Total ${S.scenes.filter((x) => x.image).length}/${S.scenes.length} scene punya gambar.${failed.length ? `\nGagal: ${failed.join(', ')}` : ''}` };
   },
 
-  async render({ resolution, fps, subtitles }, progress) {
+  async render({ resolution, fps, subtitles, hook_text }, progress) {
     go(5);
+    if (hook_text != null) {
+      const t = String(hook_text).trim();
+      S.hook.on = t.toLowerCase() !== 'off';
+      if (S.hook.on && t) { S.hook.text = t; S.hook.auto = ''; }
+    }
     if (resolution) S.res = Number(resolution) === 720 ? 720 : 1080;
     if (fps) S.fps = Number(fps) === 24 ? 24 : 30;
     if (subtitles != null) S.subtitles = !!subtitles;
@@ -1622,7 +1655,7 @@ const agentTools = {
     v.src = URL.createObjectURL(out.blob);
     v.classList.remove('hidden');
     $('#renderInfo').textContent = `✅ Video jadi (${fmtTime(out.duration)}) — ${file}`;
-    return { text: `Video selesai dalam ${out.elapsed.toFixed(0)} detik: ${fmtTime(out.duration)}, ${out.width}×${out.height}.\nTersimpan di: ${file}` };
+    return { text: `Video selesai dalam ${out.elapsed.toFixed(0)} detik: ${fmtTime(out.duration)}, ${out.width}×${out.height}.\nTeks hook 2 detik pertama: ${S.hook.on && S.hook.text ? `"${S.hook.text}"` : 'tidak ada'}\nTersimpan di: ${file}` };
   },
 
   async youtube(_args, progress) {
@@ -1803,6 +1836,10 @@ function initUI() {
   $('#maxPause').value = String(S.maxPause);
   showTrim();
   $('#subtitles').checked = S.subtitles;
+  S.hook = { ...DEFAULT_STATE.hook, ...S.hook };
+  $('#hookOn').checked = S.hook.on;
+  $('#hookText').value = S.hook.text;
+  $('#hookBox').classList.toggle('hidden', !S.hook.on);
   segSyncs.forEach((f) => f());
 }
 

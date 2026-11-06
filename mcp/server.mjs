@@ -116,6 +116,7 @@ const TOOLS = [
       resolution: num('720 or 1080 (default)'),
       fps: num('24 or 30 (default)'),
       subtitles: { type: 'boolean', description: 'Burn subtitles into the video (default true)' },
+      hook_text: str('Big text shown in the first 2 seconds (the frame people see while scrolling): the core number/contrast of the opening line, 2–5 words or "A | B". Omit = the AI suggests it from the script; "off" = no hook text'),
     }),
   },
   {

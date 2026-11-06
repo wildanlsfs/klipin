@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "klipin",
   "display_name": "Klipin",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Make faceless YouTube videos with the Klipin Chrome extension: title, script, voice, scenes, Google Flow images, MP4 render, YouTube pack & thumbnail.",
   "long_description": "Connects your AI agent to the Klipin Chrome extension running on this computer. Keep Chrome open with the Klipin panel (click the Klipin icon) — the agent can then write the script, sync scenes to the voice-over, generate images in Google Flow, render the MP4 and prepare titles, description, tags and a thumbnail. Everything runs locally; API keys stay inside the extension.",
   "author": {
