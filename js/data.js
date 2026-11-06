@@ -190,8 +190,8 @@ export const THUMB_TYPES = [
   {
     id: 'kontras', emoji: '⚖️', label: 'Dua Hasil Bertolak Belakang', layout: 'split',
     hint: 'Gambar dibelah dua: hal yang sama, hasil berlawanan. Penonton penasaran "kok bisa beda?"',
-    text: 'Dua bagian pendek dipisah " | " (kiri = hasil buruk, kanan = hasil baik), masing-masing 1–3 kata, sebaiknya angka dari naskah (contoh: "−2 JUTA | +5 JUTA"). Jangan jelaskan penyebabnya.',
-    image: 'Split composition: the SAME subject shown twice side by side (top/bottom for vertical), left side = the bad outcome (worried expression, muted colors), right side = the good outcome (happy, bright colors). The only visible difference is the cause explained in the video (e.g. bought feed vs own grass). Clear divider in the middle, empty band at the top of each half for text.',
+    text: 'Dua bagian pendek dipisah " | " (kiri = sisi buruk, kanan = sisi baik), masing-masing 1–3 kata. Ambil kontras UTAMA video (biasanya di kalimat pembuka naskah), sebaiknya dua angkanya (contoh: "−2 JUTA | +5 JUTA", "Rp100 RIBU | Rp60 RIBU"), bukan kontras sampingan. Jangan jelaskan penyebabnya.',
+    image: 'Split composition (top/bottom for vertical) showing the MAIN contrast of the video: either the SAME subject twice (bad outcome vs good outcome, e.g. bought feed vs own grass) or the two ends of the same chain (e.g. the market stall where the price is high vs the farmer who receives little). Bad side: worried expression, muted colors; good side: happy, bright colors. Clear divider in the middle, empty band at the top of each half for text.',
     formats: ['explainer', 'investigasi', 'listicle'],
   },
   {

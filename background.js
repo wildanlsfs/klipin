@@ -6,6 +6,7 @@ chrome.sidePanel
 // AI agent (Klipin MCP server di localhost): kalau agent mengirim tugas tetapi panel Klipin belum
 // terbuka, buka Klipin di tab (side panel tidak bisa dibuka tanpa klik pengguna).
 const AGENT_URL = 'http://127.0.0.1:47816';
+let lastWake = 0;
 chrome.alarms.create('klipin-agent', { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== 'klipin-agent') return;
@@ -16,7 +17,15 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (!st.pending || st.alive) return;
     const url = chrome.runtime.getURL('sidepanel.html');
     const open = await chrome.tabs.query({ url: `${url}*` });
-    if (!open.length) await chrome.tabs.create({ url: `${url}?agent=1`, active: false, pinned: true });
+    if (!open.length) {
+      const tab = await chrome.tabs.create({ url: `${url}?agent=1`, active: false, pinned: true });
+      chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => {}); // jangan ditidurkan hemat memori Chrome
+    } else if (Date.now() - lastWake > 90000) {
+      // Tab Klipin ada tapi tidak terhubung (biasanya ditidurkan Chrome): muat ulang, maks sekali per 90 detik.
+      lastWake = Date.now();
+      await chrome.tabs.reload(open[0].id);
+      chrome.tabs.update(open[0].id, { autoDiscardable: false }).catch(() => {});
+    }
   } catch {
     // server MCP tidak jalan — normal kalau pengguna tidak memakai AI agent
   }

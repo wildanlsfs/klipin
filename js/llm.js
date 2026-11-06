@@ -518,8 +518,7 @@ Buat SATU konsep untuk setiap jenis berikut, persis sesuai aturannya:
 ${list.map((t, k) => `${k + 1}. "${t.id}" (${t.label})
    Teks: ${t.text}
    Gambar: ${t.image}
-   Ruang kosong untuk teks: ${spot(t)}.`).join('
-')}
+   Ruang kosong untuk teks: ${spot(t)}.`).join('\n')}
 
 Aturan untuk semua konsep:
 ${ruleLines(s, 'thumb', null)}

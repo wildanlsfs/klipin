@@ -1807,6 +1807,8 @@ function initUI() {
 }
 
 async function init() {
+  // Klipin dibuka sebagai tab (mis. oleh AI agent): jangan sampai ditidurkan fitur hemat memori Chrome
+  chrome.tabs.getCurrent?.().then((t) => t && chrome.tabs.update(t.id, { autoDiscardable: false })).catch(() => {});
   settings = await llm.loadSettings();
   const saved = await kvGet('state').catch(() => null);
   if (saved) {
