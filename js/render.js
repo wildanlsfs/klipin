@@ -185,6 +185,72 @@ function drawHook(ctx, text, w, h, alpha) {
   ctx.restore();
 }
 
+// Angka penting di layar: kartu putih bergaya catatan papan tulis, muncul dengan efek "pop" saat scene-nya mulai.
+function drawCallout(ctx, text, w, h, age) {
+  const vertical = h > w;
+  const base = Math.round(vertical ? w * 0.1 : h * 0.095);
+  const t = hookCase(text).trim();
+  const maxW = w * 0.82;
+  const red = '#e02424';
+  // baris = daftar [teks, warna]; bagian setelah "→" (hasil/perubahan) merah, sisanya hitam
+  const [a, b] = t.split('→');
+  let one, two;
+  if (b != null) {
+    one = [[[`${a.trim()} → `, '#111'], [b.trim(), red]]];
+    two = [[[`${a.trim()} →`, '#111']], [[b.trim(), red]]];
+  } else {
+    const color = t.startsWith('−') || t.startsWith('-') ? red : t.startsWith('+') ? '#16a34a' : '#111';
+    one = [[[t, color]]];
+    const words = t.split(/\s+/);
+    const mid = Math.max(1, Math.ceil(words.length / 2));
+    two = words.length > 1 ? [[[words.slice(0, mid).join(' '), color]], [[words.slice(mid).join(' '), color]]] : one;
+  }
+  ctx.save();
+  ctx.font = HOOK_FONT(base);
+  const widthOf = (lines) => Math.max(...lines.map((l) => l.reduce((s, [x]) => s + ctx.measureText(x).width, 0)));
+  // satu baris kalau cukup (boleh diperkecil sampai 80%), selain itu dua baris
+  let lines = one, wid = widthOf(one);
+  if (wid * 0.8 > maxW) { lines = two; wid = widthOf(two); }
+  const size = Math.round(base * Math.min(1, maxW / wid));
+  ctx.font = HOOK_FONT(size);
+  const tw = widthOf(lines);
+  const lh = size * 1.04;
+  const padX = size * 0.45, padY = size * 0.28;
+  const bw = tw + padX * 2, bh = lh * lines.length + padY * 2;
+  const cx = vertical ? w / 2 : w * 0.06 + bw / 2;
+  const cy = vertical ? h * 0.15 : h * 0.1 + bh / 2;
+  const k = Math.min(1, age / 0.18);
+  const scale = 0.7 + 0.3 * (1 - (1 - k) ** 3); // ease-out
+  ctx.translate(cx, cy);
+  ctx.rotate(-0.04);
+  ctx.scale(scale, scale);
+  ctx.globalAlpha = Math.min(1, age / 0.12);
+  ctx.shadowColor = 'rgba(0,0,0,.35)';
+  ctx.shadowBlur = size * 0.3;
+  ctx.shadowOffsetY = size * 0.08;
+  ctx.fillStyle = '#fffdf5';
+  ctx.beginPath();
+  ctx.roundRect(-bw / 2, -bh / 2, bw, bh, size * 0.22);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.lineWidth = Math.max(3, size * 0.07);
+  ctx.strokeStyle = '#111';
+  ctx.stroke();
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  lines.forEach((segs, i) => {
+    const lw = segs.reduce((s, [x]) => s + ctx.measureText(x).width, 0);
+    let x = -lw / 2;
+    const y = (i - (lines.length - 1) / 2) * lh + size * 0.04;
+    for (const [str, color] of segs) {
+      ctx.fillStyle = color;
+      ctx.fillText(str, x, y);
+      x += ctx.measureText(str).width;
+    }
+  });
+  ctx.restore();
+}
+
 // 16:9 dengan dua sisi: berdampingan dalam satu baris, kiri merah | kanan hijau.
 function drawHookSides(ctx, parts, w, h, alpha) {
   const half = w / 2;
@@ -230,7 +296,7 @@ function drawHookSides(ctx, parts, w, h, alpha) {
  */
 const STALL_MS = 20000; // encoder tidak mengeluarkan apa pun selama ini → dianggap macet
 
-export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtitles, hook, fileHandle, onProgress, signal }) {
+export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtitles, hook, callouts, fileHandle, onProgress, signal }) {
   const { w, h } = outputSize(ratio, res);
   const usable = scenes.filter((s) => s.image);
   if (!usable.length) throw new RenderError('Belum ada gambar scene.', { hint: 'Buat gambar dulu di langkah 4.' });
@@ -255,7 +321,11 @@ export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtit
     onProgress?.({ phase: 'Menyiapkan audio…', pct: 0 });
     const acfg = audio ? await pickAudioConfig() : null;
     const pcm = acfg ? (await resample(audio, AUDIO_RATE)).samples : null;
-    const job = { w, h, fps, total, timeline, cues, hook: hook?.text?.trim() ? hook : null, acfg, pcm, fileHandle, onProgress, signal };
+    const job = {
+      w, h, fps, total, timeline, cues, hook: hook?.text?.trim() ? hook : null,
+      callouts: (callouts || []).filter((c) => c.text?.trim() && c.end > c.start).sort((a, b) => a.start - b.start),
+      acfg, pcm, fileHandle, onProgress, signal,
+    };
 
     // Encoder hardware (GPU) lebih cepat, tapi di sebagian laptop Windows driver-nya macet/error.
     // Kalau begitu, ulangi otomatis dengan encoder software.
@@ -280,7 +350,7 @@ export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtit
   }
 }
 
-async function encodeOnce({ w, h, fps, total, timeline, cues, hook, acfg, pcm, fileHandle, onProgress, signal }, hardwareAcceleration) {
+async function encodeOnce({ w, h, fps, total, timeline, cues, hook, callouts, acfg, pcm, fileHandle, onProgress, signal }, hardwareAcceleration) {
   onProgress?.({ phase: 'Menyiapkan encoder video…', pct: 0 });
   const vcfg = await pickVideoConfig(w, h, fps, hardwareAcceleration);
 
@@ -378,6 +448,8 @@ async function encodeOnce({ w, h, fps, total, timeline, cues, hook, acfg, pcm, f
         while (ci < cues.length - 1 && t >= cues[ci].end) ci++;
         if (t >= cues[ci].start && t < cues[ci].end) drawSubtitle(ctx, cues[ci].text, w, h);
       }
+      const co = callouts.find((c) => t >= c.start && t < c.end);
+      if (co && !(hook && t < hook.sec)) drawCallout(ctx, co.text, w, h, t - co.start);
       if (hook && t < hook.sec) drawHook(ctx, hook.text, w, h, Math.min(1, (hook.sec - t) / 0.3)); // memudar 0,3 detik terakhir
 
       feedAudioUntil(t + 1);

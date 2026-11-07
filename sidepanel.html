@@ -141,7 +141,9 @@
         <div>
           <label for="sceneSec">Panjang per scene</label>
           <select id="sceneSec">
+            <option value="3">± 3 detik</option>
             <option value="4">± 4 detik</option>
+            <option value="5">± 5 detik</option>
             <option value="6">± 6 detik</option>
             <option value="8">± 8 detik</option>
             <option value="12">± 12 detik</option>
@@ -239,6 +241,14 @@
           <button class="btn" id="hookSuggestBtn" style="flex:none">✨ Usulkan</button>
         </div>
         <p class="hint">Frame pertama yang dilihat orang saat menggulir. Ambil angka atau kontras inti dari kalimat pembuka.</p>
+      </div>
+      <label class="check"><input type="checkbox" id="calloutOn" /> Angka penting di layar (saat narator menyebutnya)</label>
+      <div id="calloutBox">
+        <div class="label-row">
+          <span class="hint">Satu baris per scene: <code>nomor scene: teks</code>. Kosongkan = dibuat AI saat render.</span>
+          <button class="btn" id="calloutSuggestBtn" style="flex:none">✨ Usulkan</button>
+        </div>
+        <textarea id="calloutText" rows="4" placeholder="3: Modal Rp25 JT&#10;5: Pakan −Rp7,2 JT&#10;8: Rp100 RB → Rp60 RB"></textarea>
       </div>
 
       <div class="summary" id="renderSummary"></div>

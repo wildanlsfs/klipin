@@ -92,7 +92,7 @@ const TOOLS = [
     inputSchema: obj({
       visual_style: str('Visual style id (see klipin_options)'),
       ratio: str('Aspect ratio', { enum: ['16:9', '9:16', '1:1'] }),
-      scene_seconds: num('Approximate seconds per scene (4, 6, 8, 12)'),
+      scene_seconds: num('Approximate seconds per scene (3–12; 4–5 keeps viewers watching)'),
       source: str('"script" (default) or "transcript" (transcribe the audio when it differs from the script)', { enum: ['script', 'transcript'] }),
     }),
   },
@@ -117,6 +117,7 @@ const TOOLS = [
       fps: num('24 or 30 (default)'),
       subtitles: { type: 'boolean', description: 'Burn subtitles into the video (default true)' },
       hook_text: str('Big text shown in the first 2 seconds (the frame people see while scrolling): the core number/contrast of the opening line, 2–5 words or "A | B". Omit = the AI suggests it from the script; "off" = no hook text'),
+      callouts: { type: 'boolean', description: 'Show key numbers on screen as note cards while the narrator says them (default true; picked by the AI from the scene narration)' },
     }),
   },
   {

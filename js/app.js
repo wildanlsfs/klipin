@@ -37,6 +37,7 @@ const DEFAULT_STATE = {
   fps: 30,
   subtitles: true,
   hook: { on: true, text: '', auto: '' }, // teks besar 2 detik pertama; auto = awal naskah saat teks diusulkan AI
+  callouts: { on: true, list: [], auto: '' }, // angka penting di layar per scene: [{ i, text }]; auto = scene saat dibuat AI
   yt: null,
 };
 
@@ -807,6 +808,12 @@ $('#resyncBtn3').addEventListener('click', () => resyncScenes());
 $('#subtitles').addEventListener('change', (e) => { S.subtitles = e.target.checked; save(); });
 $('#hookOn').addEventListener('change', (e) => { S.hook.on = e.target.checked; $('#hookBox').classList.toggle('hidden', !S.hook.on); save(); });
 $('#hookText').addEventListener('input', (e) => { S.hook.text = e.target.value; S.hook.auto = ''; save(); });
+$('#calloutOn').addEventListener('change', (e) => { S.callouts.on = e.target.checked; $('#calloutBox').classList.toggle('hidden', !S.callouts.on); save(); });
+$('#calloutText').addEventListener('input', (e) => { S.callouts.list = parseCallouts(e.target.value); S.callouts.auto = ''; save(); });
+$('#calloutSuggestBtn').addEventListener('click', (e) => busy(e.currentTarget, '⏳', async () => {
+  const n = (await suggestCallouts()).length;
+  toast(`${n} angka penting ✓`, 'ok');
+}));
 $('#hookSuggestBtn').addEventListener('click', (e) => busy(e.currentTarget, '⏳', async () => {
   await suggestHook();
   toast('Teks hook diusulkan ✓', 'ok');
@@ -821,6 +828,34 @@ async function suggestHook() {
   $('#hookText').value = text;
   save();
   return text;
+}
+
+// Angka penting di layar. Daftar bisa diedit sebagai baris "nomor scene: teks".
+const calloutKey = () => S.scenes.map((x) => x.text).join('|').slice(0, 600);
+const calloutLines = (list) => list.map((c) => `${c.i}: ${c.text}`).join('\n');
+function parseCallouts(txt) {
+  return txt.split('\n').map((l) => /^\s*(\d+)\s*[:.)-]\s*(.+)$/.exec(l)).filter(Boolean)
+    .map((m) => ({ i: Number(m[1]), text: m[2].trim() }));
+}
+async function suggestCallouts() {
+  if (!S.scenes.length) throw new Error('Belum ada scene (langkah 3).');
+  const list = await llm.sceneCallouts(settings, { title: S.title || S.rawTitle, scenes: S.scenes, lang: S.lang });
+  S.callouts.list = list;
+  S.callouts.auto = calloutKey();
+  $('#calloutText').value = calloutLines(list);
+  save();
+  return list;
+}
+async function calloutsForRender(hook) {
+  if (!S.callouts.on) return [];
+  if (!S.callouts.list.length || (S.callouts.auto && S.callouts.auto !== calloutKey())) {
+    try { await suggestCallouts(); } catch (e) { console.warn('[Klipin] angka di layar', e); return []; }
+  }
+  const byI = new Map(S.scenes.map((x) => [x.i, x]));
+  return S.callouts.list.map((c) => {
+    const sc = byI.get(c.i);
+    return sc && { text: c.text, start: Math.max(sc.start + 0.15, hook ? hook.sec : 0), end: sc.end };
+  }).filter(Boolean);
 }
 
 async function hookForRender() {
@@ -897,8 +932,10 @@ async function renderVideo(fileHandle = null, onProgress = () => {}) {
   try {
     $('#renderInfo').textContent = S.hook.on ? 'Menyiapkan teks hook…' : '';
     const hook = await hookForRender();
+    if (S.callouts.on) $('#renderInfo').textContent = 'Menyiapkan angka penting di layar…';
+    const callouts = await calloutsForRender(hook);
     return await renderMp4({
-      scenes: S.scenes, audio: currentAudio(), pauses: audioPauses(), ratio: S.ratio, res: S.res, fps: S.fps, subtitles: S.subtitles, hook,
+      scenes: S.scenes, audio: currentAudio(), pauses: audioPauses(), ratio: S.ratio, res: S.res, fps: S.fps, subtitles: S.subtitles, hook, callouts,
       fileHandle, signal: renderAbort.signal,
       onProgress: ({ phase, pct, elapsed }) => {
         setProgress('#renderProgress', pct);
@@ -1438,6 +1475,7 @@ async function resetProject() {
   const keep = {
     lang: S.lang, visualStyle: S.visualStyle, ratio: S.ratio, ttsEngine: S.ttsEngine, ttsVoices: S.ttsVoices,
     res: S.res, fps: S.fps, subtitles: S.subtitles, hook: { ...DEFAULT_STATE.hook, on: S.hook?.on !== false },
+    callouts: { ...DEFAULT_STATE.callouts, on: S.callouts?.on !== false },
   };
   S = { ...structuredClone(DEFAULT_STATE), ...keep };
   audioRaw = audioTrim = null;
@@ -1634,8 +1672,9 @@ const agentTools = {
     return { text: `Gambar: ${r?.ok ?? 0} berhasil, ${r?.fail ?? 0} gagal. Total ${S.scenes.filter((x) => x.image).length}/${S.scenes.length} scene punya gambar.${failed.length ? `\nGagal: ${failed.join(', ')}` : ''}` };
   },
 
-  async render({ resolution, fps, subtitles, hook_text }, progress) {
+  async render({ resolution, fps, subtitles, hook_text, callouts }, progress) {
     go(5);
+    if (callouts != null) S.callouts.on = callouts !== false && String(callouts).toLowerCase() !== 'off';
     if (hook_text != null) {
       const t = String(hook_text).trim();
       S.hook.on = t.toLowerCase() !== 'off';
@@ -1655,7 +1694,7 @@ const agentTools = {
     v.src = URL.createObjectURL(out.blob);
     v.classList.remove('hidden');
     $('#renderInfo').textContent = `✅ Video jadi (${fmtTime(out.duration)}) — ${file}`;
-    return { text: `Video selesai dalam ${out.elapsed.toFixed(0)} detik: ${fmtTime(out.duration)}, ${out.width}×${out.height}.\nTeks hook 2 detik pertama: ${S.hook.on && S.hook.text ? `"${S.hook.text}"` : 'tidak ada'}\nTersimpan di: ${file}` };
+    return { text: `Video selesai dalam ${out.elapsed.toFixed(0)} detik: ${fmtTime(out.duration)}, ${out.width}×${out.height}.\nTeks hook 2 detik pertama: ${S.hook.on && S.hook.text ? `"${S.hook.text}"` : 'tidak ada'}\nAngka penting di layar: ${S.callouts.on && S.callouts.list.length ? S.callouts.list.map((c) => `scene ${c.i} "${c.text}"`).join(', ') : 'tidak ada'}\nTersimpan di: ${file}` };
   },
 
   async youtube(_args, progress) {
@@ -1840,6 +1879,10 @@ function initUI() {
   $('#hookOn').checked = S.hook.on;
   $('#hookText').value = S.hook.text;
   $('#hookBox').classList.toggle('hidden', !S.hook.on);
+  S.callouts = { ...DEFAULT_STATE.callouts, ...S.callouts };
+  $('#calloutOn').checked = S.callouts.on;
+  $('#calloutText').value = calloutLines(S.callouts.list);
+  $('#calloutBox').classList.toggle('hidden', !S.callouts.on);
   segSyncs.forEach((f) => f());
 }
 

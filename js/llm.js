@@ -69,15 +69,18 @@ export const DEFAULT_RULES = {
     { id: 'narration', label: 'Hanya narasi', text: 'Hanya teks yang dibacakan narator. TANPA judul bagian, label adegan, instruksi visual, tanda kurung, emoji, markdown, atau nomor.' },
     { id: 'tts', label: 'Enak dibacakan TTS', text: 'Paragraf pendek (2–4 kalimat), dipisah baris kosong. Kalimat tidak terlalu panjang supaya enak dibacakan TTS.' },
     { id: 'facts', label: 'Fakta akurat', text: 'Fakta harus akurat; jika ada yang belum pasti, sebutkan sebagai dugaan/teori.' },
-    { id: 'cta', label: 'Ajakan di penutup', text: 'Penutup: kesimpulan singkat, lalu 1 kalimat ajakan (kirim video ini ke orang spesifik yang butuh, contoh: "Kirim ke teman yang lagi mulai ternak.", atau subscribe).' },
+    { id: 'cta', label: 'Ajakan di penutup', text: 'Penutup: langsung tuntaskan poin terakhir atau jawaban utama, lalu 1 kalimat ajakan (kirim video ini ke orang spesifik yang butuh, contoh: "Kirim ke teman yang lagi mulai ternak.", atau subscribe).' },
+    { id: 'nofarewell', label: 'Tanpa kata pamitan', text: 'JANGAN memakai kalimat penutup yang memberi sinyal video selesai, seperti "Jadi, kesimpulannya…", "Itulah…", "Sekian video kali ini", "Terima kasih sudah menonton", atau "Sampai jumpa". Penonton langsung keluar saat mendengarnya.' },
     { id: 'loop', label: 'Loop ke pembuka (Shorts)', for: 'short', text: 'Kalimat paling akhir (setelah ajakan) pendek dan nyambung ke kalimat pertama (mengulang kata kunci atau pertanyaan pembuka), supaya video terasa mulus saat terputar ulang.' },
     { id: 'sections', label: 'Bagian jelas (video panjang)', for: 'long', text: 'Susun 4–7 bagian berurutan, masing-masing membahas satu sub-topik (nanti jadi bab YouTube). Kalimat pertama tiap bagian langsung menyebut isinya, tanpa judul bagian.' },
+    { id: 'bridge', label: 'Jembatan ke video lain (video panjang)', for: 'long', text: 'Kalimat terakhir menjembatani ke topik berikutnya yang masih berkaitan (contoh: "Tapi hitungan ini tidak ada artinya kalau salah memilih bibit. Itu kita bedah di video berikutnya."), bukan pamitan.' },
     { id: 'rehook', label: 'Pancingan berkala (video panjang)', for: 'long', text: 'Setiap ±45–60 detik buka pertanyaan atau janji baru yang baru dijawab beberapa paragraf kemudian, supaya penonton bertahan. Jawaban/hitungan utama dibuka menjelang akhir, bukan di awal.' },
   ],
   scene: [
     { id: 'describe', label: 'Isi prompt', text: '1–3 kalimat, deskripsikan subjek, aksi, latar, komposisi kamera, dan suasana yang MENGGAMBARKAN isi narasi.' },
     { id: 'stylefirst', label: 'Gaya di depan', text: 'Selalu awali dengan deskripsi gaya visual di atas agar konsisten.' },
     { id: 'hookimg', label: 'Scene 1 = hook', text: 'Scene 1 adalah hook: buat gambar paling mencolok yang langsung MEMPERLIHATKAN kontras/klaim di narasinya (mis. dua pilihan berdampingan, sebelum–sesudah, perbandingan besar–kecil), bukan suasana pembuka.' },
+    { id: 'cast', label: 'Tokoh berulang & antagonis', text: 'Tokoh yang muncul berulang diberi ciri tetap yang sama di setiap scene (mis. peternak bercaping, pembeli membawa tas belanja). Pihak yang merugikan dalam cerita (tengkulak, rentenir, biaya tak terduga) digambarkan sebagai tokoh antagonis dengan ciri jelas yang konsisten, mis. stickman berkacamata hitam dan berjas, supaya cerita terasa seperti drama.' },
     { id: 'safe', label: 'Tanpa teks & aman', text: 'Tanpa teks/tulisan/huruf/watermark di gambar. Hindari tokoh nyata yang dikenali, kekerasan grafis, dan konten sensitif.' },
   ],
   thumb: [
@@ -562,9 +565,32 @@ Balas HANYA JSON: {"text":""}`, (o) => typeof o.text === 'string' && o.text.trim
   return out.text.trim().replace(/\s*\|\s*/g, ' | ');
 }
 
+// Angka penting di layar: untuk scene yang narasinya menyebut angka kunci, teks pendek bergaya catatan
+// (mis. "Pakan −Rp3,8 JT"). Hasil: [{ i, text }].
+export async function sceneCallouts(s, { title, scenes, lang }) {
+  const en = lang === 'en';
+  const list = scenes.map((x) => `${x.i}. ${x.text.slice(0, 220)}`).join('\n');
+  const out = await generateJSON(s, 'scene', `Video "${title}". Narasi per scene:
+${list.slice(0, 9000)}
+
+Pilih scene yang narasinya menyebut ANGKA KUNCI (harga, biaya, untung/rugi, persen, jumlah, lama waktu), lalu tulis teks catatan pendek yang tampil di layar selama scene itu, seperti angka yang dicoret di papan tulis.
+Aturan:
+- Hanya angka yang benar-benar disebut di narasi scene itu. Tulis dengan digit dan singkatan (Rp25 JT, Rp3.800, 70%, 45 HARI, 10 EKOR).
+- Maks 5 kata, tanpa label urutan (jangan "Pertama:", "Kedua:"). Boleh perbandingan/perubahan dengan "→" (contoh: "Rp100 RB → Rp60 RB", "Modal Rp25 JT", "Pakan −Rp7,2 JT").
+- Maks sekitar 40% dari jumlah scene; lewati scene tanpa angka atau yang angkanya tidak penting. Scene 1 dilewati (sudah ada teks hook).
+- Jangan mengulang teks yang sama di dua scene berturut-turut.
+- Bahasa: ${en ? 'English' : 'Bahasa Indonesia'}.
+
+Balas HANYA JSON: {"callouts":[{"i":<nomor scene>,"text":""}]}`, (o) => Array.isArray(o.callouts));
+  const ids = new Set(scenes.map((x) => x.i));
+  return out.callouts
+    .filter((c) => c && ids.has(Number(c.i)) && Number(c.i) !== 1 && typeof c.text === 'string' && c.text.trim())
+    .map((c) => ({ i: Number(c.i), text: c.text.trim().slice(0, 40) }));
+}
+
 export async function characterBible(s, { title, script, visualStyle }) {
   try {
-    const out = await generateJSON(s, 'scene', `Dari naskah video "${title}" berikut, tulis catatan singkat (maks 60 kata, Bahasa Inggris) tentang tokoh utama, tempat, dan era yang akan muncul berulang, supaya gambar antar scene konsisten. Gaya visual: ${visualStyle.label}.
+    const out = await generateJSON(s, 'scene', `Dari naskah video "${title}" berikut, tulis catatan singkat (maks 70 kata, Bahasa Inggris) tentang tokoh utama, tempat, dan era yang akan muncul berulang, supaya gambar antar scene konsisten. Beri tiap tokoh ciri visual tetap; pihak yang merugikan dalam cerita (mis. tengkulak) jadikan tokoh antagonis dengan ciri jelas (mis. sunglasses and a dark suit). Gaya visual: ${visualStyle.label}.
 Naskah:
 ${script.slice(0, 6000)}
 
