@@ -6,16 +6,20 @@ Gratis & open source (MIT). Tidak ada server: semua proses (potong jeda, sinkron
 ## Tutorial video (1 menit)
 [![Tonton tutorial Klipin](docs/tutorial-thumb.jpg)](https://github.com/wildanlsfs/klipin/releases/download/v1.3.1/klipin-tutorial.mp4)
 
-Klik gambar di atas untuk menonton / download video tutorial (MP4, 66 detik).
+Klik gambar di atas untuk menonton / download video tutorial (MP4, 66 detik). Video ini dibuat di versi 1.3, jadi tampilannya
+sedikit berbeda; urutan langkahnya masih sama. Fitur baru dijelaskan di bagian **Alur** di bawah.
 
 ## Pasang
-1. Download: tombol hijau **Code → Download ZIP** di halaman ini, lalu ekstrak.
-   (Atau `git clone https://github.com/wildanlsfs/klipin.git`)
-2. Buka `chrome://extensions` → aktifkan **Developer mode** (kanan atas) → **Load unpacked** → pilih folder hasil ekstrak
-   (folder yang berisi `manifest.json`).
+1. Download `klipin-<versi>.zip` dari [Releases](https://github.com/wildanlsfs/klipin/releases/latest)
+   (atau tombol hijau **Code → Download ZIP**, atau `git clone https://github.com/wildanlsfs/klipin.git`), lalu **ekstrak**
+   ke tempat tetap, mis. `Documents/Klipin`. Jangan dihapus atau dipindah setelah dipasang.
+2. Buka `chrome://extensions` → aktifkan **Developer mode** (kanan atas) → **Load unpacked** → pilih folder yang
+   **langsung berisi `manifest.json`**.
+   - Windows sering membuat folder ganda saat ekstrak (mis. `klipin-1.8.3\klipin\manifest.json`); pilih folder yang di dalam.
 3. Klik ikon Klipin → side panel terbuka. Isi minimal satu API key di ⚙︎
-   (Gemini gratis: https://aistudio.google.com/apikey).
-4. Update ke versi baru: download lagi, timpa folder lama, lalu klik ↻ di `chrome://extensions`.
+   (Gemini gratis: https://aistudio.google.com/apikey). Model bawaan Gemini: `gemini-3.8-flash`.
+4. **Update:** saat ada versi baru, bilah hijau muncul di panel. Klik **Download update**, timpa folder lama dengan isi ZIP
+   yang baru, lalu klik **Muat ulang Klipin** (atau ↻ di `chrome://extensions`). Pengaturan, API key, dan proyek tidak hilang.
 
 Butuh Chrome 116+ (desktop). Untuk langkah gambar perlu akun Google Flow (https://flow.google.com).
 
@@ -61,8 +65,15 @@ API key tetap di extension dan tidak dikirim ke agent. Matikan kapan saja lewat 
 - Ollama: jalankan dengan `OLLAMA_ORIGINS="chrome-extension://*"`.
 
 ## Aturan prompt & gaya visual (⚙︎ → ✍️ Aturan prompt / 🎨 Gaya visual)
-- **Aturan naskah** (pembuka 3 detik, inti dalam 10 detik, pertanyaan komentar, padat informasi, ajakan penutup, loop, dll.)
-  dan **aturan prompt gambar** bisa dimatikan, diubah teksnya, atau ditambah aturan sendiri.
+- **Aturan naskah**, **aturan prompt gambar**, dan **aturan thumbnail** bisa dimatikan, diubah teksnya, atau ditambah aturan sendiri.
+  Aturan naskah bawaan antara lain:
+  - pembuka 3 detik dan inti dalam 10 detik; padat informasi; enak dibacakan TTS;
+  - **pertanyaan komentar**: di Shorts diletakkan di akhir setelah jawaban (tidak menyela hitungan), di video panjang di sepertiga awal;
+  - **jalan keluar, bukan hanya masalah**: kalau hitungan berujung tipis/rugi, naskah memberi cara konkret supaya untung;
+  - **tanpa kata pamitan** ("Sekian…", "Terima kasih sudah menonton"); ajakan penutup; loop ke pembuka (Shorts);
+    jembatan ke topik berikutnya (video panjang).
+- **Aturan prompt gambar** bawaan termasuk tokoh berulang dengan ciri tetap (pihak yang merugikan digambar sebagai antagonis
+  yang mudah dikenali) supaya gambar antar scene konsisten.
 - **Gaya visual:** prompt gaya bawaan bisa diganti, dan kamu bisa menambah gaya sendiri (muncul di pilihan langkah 3 dan di `klipin_options`).
 - Sebagian aturan bawaan hanya berlaku untuk Shorts (< 2 menit, mis. loop ke pembuka) atau video panjang
   (bagian jelas untuk bab, pancingan berkala).
@@ -83,7 +94,7 @@ API key tetap di extension dan tidak dikirim ke agent. Matikan kapan saja lewat 
    (±10 menit untuk 46 gambar). Tab Flow dijadikan tab aktif selama proses karena Chrome memperlambat tab yang tersembunyi.
    Kalau Flow tetap membuat 2+ gambar per prompt, semuanya disimpan — klik **⇄** di gambar untuk memilih. Scene gagal → ↻ atau ⬆ upload manual.
 5. **Render** – resolusi 1080/720, FPS 24/30, subtitle, dan **teks hook besar di 2 detik pertama** (angka/kontras inti dari kalimat
-   pembuka, mis. "Rp100 RIBU | Rp60 RIBU"; kosongkan supaya diusulkan AI), dan **catatan angka di layar** (kartu kecil yang muncul
+   pembuka; tiap angka diberi label, mis. "HARGA Rp25 RB | IKAN Rp5 RB"; kosongkan supaya diusulkan AI), dan **catatan angka di layar** (kartu kecil yang muncul
    saat narator menyebut angka penting, mis. "Modal Rp25 JT" atau "Rp100 RB → Rp60 RB"; diusulkan AI, bisa diedit `nomor scene: teks`) → *Render MP4* (pilih lokasi simpan). Encode H.264 + AAC via WebCodecs,
    ±115 fps di 1080p (video 3 menit ≈ 40–50 detik).
 6. **YouTube** – *Buat Judul, Deskripsi & Thumbnail*: 5 pilihan judul (≤70 karakter), deskripsi siap tempel dengan hook,
@@ -94,6 +105,17 @@ API key tetap di extension dan tidak dikirim ke agent. Matikan kapan saja lewat 
    (1 kredit per gambar, beberapa konsep sekaligus). Bandingkan pratinjaunya, ubah teksnya, lalu *Pakai*. Aturan konsep bisa diatur di
    ⚙︎ Pengaturan → Aturan prompt → Thumbnail. Teks, posisi (termasuk *Dua sisi* "A | B"), warna, dan latar tetap bisa diatur manual
    → *Download Thumbnail (JPG)*.
+
+## Mengatasi masalah
+- **"models/gemini-2.5-flash is no longer available to new users"**: Google menutup model Gemini 2.5 untuk akun baru.
+  Update ke 1.8.3+ (pindah model otomatis), atau ⚙︎ Pengaturan → Gemini → model `gemini-3.8-flash` → Simpan.
+- **Tombol ⚙︎ tidak bisa ditekan** (versi 1.6.0–1.8.1): update ke 1.8.2+ lewat bilah hijau **Download update**.
+- **"Manifest file is missing or unreadable"** saat Load unpacked: folder yang dipilih salah. Pilih folder yang langsung berisi
+  `manifest.json` (lihat langkah Pasang).
+- **Kuota Gemini habis / "limit: 0"**: model Pro tidak tersedia untuk API key gratis. Pakai model Flash, tunggu kuota pulih,
+  atau tambah provider lain (Groq/OpenRouter) di ⚙︎ sebagai cadangan.
+- **Panel tidak berubah setelah update**: pastikan folder yang ditimpa sama dengan yang terpasang di `chrome://extensions`, lalu ↻.
+- **Google Flow tidak terhubung**: buka sebuah project di flow.google.com di tab Chrome yang sama, lalu kirim ulang.
 
 ## Struktur
 - `sidepanel.html/css`, `js/app.js` – UI & alur
