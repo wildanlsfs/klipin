@@ -48,7 +48,7 @@ export const TASKS = {
 
 export const DEFAULT_SETTINGS = {
   version: 2,
-  gemini: { key: '', model: 'gemini-2.5-flash', ttsModel: 'gemini-2.5-flash-preview-tts' },
+  gemini: { key: '', model: 'gemini-3.8-flash', ttsModel: 'gemini-2.5-flash-preview-tts' },
   compat: [], // [{ id, preset, name, base, key, model, sttModel, ttsModel }]
   eleven: { key: '', model: 'eleven_multilingual_v2' },
   tasks: { title: 'gemini', script: 'gemini', scene: 'gemini', transcribe: 'gemini', youtube: 'gemini' },
@@ -261,11 +261,16 @@ async function request(url, opts, label) {
 
 // ---------------------------------------------------------------- teks
 
-// Model Pro tidak tersedia di API key gratis (kuota "limit: 0") → otomatis turun ke model Flash.
-const FREE_FALLBACK = ['gemini-flash-latest', 'gemini-2.5-flash'];
+// Model Pro tidak tersedia di API key gratis (kuota "limit: 0"), dan model lama (mis. 2.5 Flash) ditutup untuk
+// akun baru → otomatis turun ke model Flash terbaru.
+const FREE_FALLBACK = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite'];
+// Cadangan TTS yang masih menerima instruksi gaya di dalam teks (model TTS 3.8 membaca teks apa adanya).
+const TTS_FALLBACK = ['gemini-3.1-flash-tts-preview'];
 const blockedModels = new Set(); // model yang kuotanya habis/0 selama panel ini terbuka
 
 const isQuotaErr = (e) => e.status === 429 || /quota|RESOURCE_EXHAUSTED/i.test(e.message);
+// model tidak ada / sudah ditutup untuk akun ini ("no longer available to new users")
+const isGoneErr = (e) => e.status === 404 || /no longer available|not found for API|is not supported|has been deprecated/i.test(e.message);
 
 function friendlyQuota(e, model) {
   const free = /free_?tier|limit: 0/i.test(e.message);
@@ -287,22 +292,22 @@ async function geminiCall(s, body, model) {
 async function geminiGenerate(s, body, model = s.gemini.model) {
   if (!s.gemini.key) throw new Error('Gemini API key belum diisi.');
   const textModel = model === s.gemini.model;
-  const chain = textModel
-    ? [...new Set([model, model.replace(/-pro\b/, '-flash'), ...FREE_FALLBACK])].filter((m) => !blockedModels.has(m))
-    : [model];
+  const fallback = textModel ? [model.replace(/-pro\b/, '-flash'), ...FREE_FALLBACK] : model === s.gemini.ttsModel ? TTS_FALLBACK : [];
+  const chain = [...new Set([model, ...fallback])].filter((m) => !blockedModels.has(m));
   let first;
   for (const m of chain.length ? chain : [model]) {
     try {
       const j = await geminiCall(s, body, m);
-      if (m !== model) notify(`Kuota Gemini ${model} habis → memakai ${m}`);
+      if (m !== model && first) notify(isGoneErr(first) ? `Model Gemini ${model} tidak tersedia untuk akunmu → memakai ${m}` : `Kuota Gemini ${model} habis → memakai ${m}`);
       return j;
     } catch (e) {
       first ||= e;
-      // model hasil tebakan yang tidak ada (404) dilewati; selain kuota, error langsung dilaporkan
-      if (!isQuotaErr(e) && !(m !== model && e.status === 404)) throw e;
-      if (textModel && (e.status === 404 || /limit: 0|per day/i.test(e.message))) blockedModels.add(m); // bukan batas per menit
+      // kuota habis atau model tidak tersedia → coba model berikutnya; error lain langsung dilaporkan
+      if (!isQuotaErr(e) && !isGoneErr(e)) throw e;
+      if (isGoneErr(e) || /limit: 0|per day/i.test(e.message)) blockedModels.add(m); // bukan batas per menit
     }
   }
+  if (isGoneErr(first)) throw new Error(`Gemini: model ${model} tidak tersedia untuk API key ini. Pilih model lain di ⚙︎ Pengaturan (mis. gemini-3.8-flash).`);
   throw isQuotaErr(first) ? friendlyQuota(first, model) : first;
 }
 
