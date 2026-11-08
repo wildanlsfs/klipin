@@ -64,11 +64,13 @@ export const DEFAULT_RULES = {
   script: [
     { id: 'hook', label: 'Pembuka 3 detik', text: 'Kalimat PERTAMA (≤3 detik, maks ±10 kata) langsung ke inti: klaim tajam, kontras, atau angka mengejutkan tentang topik. Tanpa salam, tanpa pengantar ("Pernahkah kamu…", "Di video ini…"), tanpa menjelaskan latar dulu. Kalimat kedua memberi alasan untuk terus menonton (janji jawaban/akibat).' },
     { id: 'core10', label: 'Inti dalam 10 detik', text: 'Dalam 10 detik pertama (±3 kalimat) sudah muncul angka/kontras inti yang konkret (contoh: margin A vs margin B). JANGAN membuka dengan simulasi panjang ("Misalnya kamu beli 10 kg…", "Bayangkan…"). Hitungan atau contoh baru boleh SETELAH kontras inti disebut, dan dibuat ringkas.' },
-    { id: 'comment', label: 'Pertanyaan komentar', text: 'Di sepertiga awal video (sekitar 25–40% durasi), sisipkan SATU pertanyaan komentar berupa dilema spesifik dari pengalaman penonton, terkait langsung dengan bagian yang sedang dibahas (contoh: "Pernah hitung susut bobot waktu bikin fillet? Berapa persen? Tulis di komentar."). Hindari ajakan umum seperti "Bagaimana pendapatmu?". Setelah itu lanjutkan isi seperti biasa.' },
+    { id: 'comment', label: 'Pertanyaan komentar (video panjang)', for: 'long', text: 'Di sepertiga awal video (sekitar 25–40% durasi), sisipkan SATU pertanyaan komentar berupa dilema spesifik dari pengalaman penonton, terkait langsung dengan bagian yang sedang dibahas (contoh: "Pernah hitung susut bobot waktu bikin fillet? Berapa persen? Tulis di komentar."). Hindari ajakan umum seperti "Bagaimana pendapatmu?". Setelah itu lanjutkan isi seperti biasa.' },
     { id: 'density', label: 'Padat informasi', text: 'Setiap 1–2 kalimat harus memberi informasi baru (fakta, angka, akibat, atau perbandingan). Tanpa kalimat pengisi, pengulangan, atau basa-basi transisi ("Nah, sekarang kita bahas…").' },
     { id: 'narration', label: 'Hanya narasi', text: 'Hanya teks yang dibacakan narator. TANPA judul bagian, label adegan, instruksi visual, tanda kurung, emoji, markdown, atau nomor.' },
     { id: 'tts', label: 'Enak dibacakan TTS', text: 'Paragraf pendek (2–4 kalimat), dipisah baris kosong. Kalimat tidak terlalu panjang supaya enak dibacakan TTS.' },
     { id: 'facts', label: 'Fakta akurat', text: 'Fakta harus akurat; jika ada yang belum pasti, sebutkan sebagai dugaan/teori.' },
+    { id: 'wayforward', label: 'Jalan keluar, bukan hanya masalah', text: 'Kalau hitungan atau ceritanya berujung tipis, rugi, atau merugikan, jangan berhenti di situ: sebelum penutup, beri jalan keluar konkret yang bisa dilakukan penonton (syarat supaya untung, mis. skala atau harga jual minimal; cara menekan biaya terbesar; atau pilihan yang lebih baik). Tetap jujur: jangan membesar-besarkan untung maupun rugi.' },
+    { id: 'commentEnd', label: 'Pertanyaan komentar di akhir (Shorts)', for: 'short', text: 'JANGAN menyela hitungan atau penjelasan di tengah video dengan ajakan komentar; isi mengalir tanpa jeda sampai jawaban utama keluar. SATU pertanyaan komentar diletakkan di akhir, tepat setelah jawaban: dilema spesifik yang membelah opini (contoh: "Kamu pilih jual langsung ke konsumen, atau tetap lewat tengkulak?"). Hindari ajakan umum seperti "Bagaimana pendapatmu?".' },
     { id: 'cta', label: 'Ajakan di penutup', text: 'Penutup: langsung tuntaskan poin terakhir atau jawaban utama, lalu 1 kalimat ajakan (kirim video ini ke orang spesifik yang butuh, contoh: "Kirim ke teman yang lagi mulai ternak.", atau subscribe).' },
     { id: 'nofarewell', label: 'Tanpa kata pamitan', text: 'JANGAN memakai kalimat penutup yang memberi sinyal video selesai, seperti "Jadi, kesimpulannya…", "Itulah…", "Sekian video kali ini", "Terima kasih sudah menonton", atau "Sampai jumpa". Penonton langsung keluar saat mendengarnya.' },
     { id: 'loop', label: 'Loop ke pembuka (Shorts)', for: 'short', text: 'Kalimat paling akhir (setelah ajakan) pendek dan nyambung ke kalimat pertama (mengulang kata kunci atau pertanyaan pembuka), supaya video terasa mulus saat terputar ulang.' },
@@ -553,11 +555,15 @@ export async function hookText(s, { title, script, lang }) {
   const out = await generateJSON(s, 'youtube', `Video pendek berjudul "${title}". Kalimat pembuka naskahnya:
 ${script.split(/\n\s*\n/).slice(0, 2).join('\n').slice(0, 600)}
 
+Seluruh naskah (untuk mengecek arti tiap angka):
+${script.slice(0, 2500)}
+
 Tulis teks besar yang tampil di layar selama 2 detik pertama video, supaya orang yang sedang menggulir berhenti.
 Aturan:
 - Ambil kontras atau angka INTI dari kalimat pembuka (bukan dari bagian lain), dan hanya fakta yang ada di naskah.
-- Kalau intinya perbandingan dua angka/hal, tulis dua sisi dipisah " | ", masing-masing 1–3 kata (contoh: "Rp100 RIBU | Rp60 RIBU", "35 HARI | 3 BULAN").
+- Kalau intinya perbandingan dua angka/hal, tulis dua sisi dipisah " | ", masing-masing 2–4 kata. Tiap angka WAJIB diberi label singkat apa angka itu, supaya tidak disangka angka lain (mis. disangka untung): "HARGA Rp25 RB | IKAN Rp5 RB", "JUAL Rp100 RB | MODAL Rp60 RB", "35 HARI | 3 BULAN".
 - Kalau bukan, tulis satu frasa 2–5 kata (contoh: "70% TIDAK SAMPAI KE PETANI").
+- Angka harus sama persis dengan naskah dan tetap bermakna sama (biaya tetap biaya, untung tetap untung). Jangan membulatkan atau menghitung ulang.
 - Jangan mengulang judul kata per kata dan jangan menjawab pertanyaannya. Tanpa emoji dan tanpa tanda pagar.
 - Bahasa: ${en ? 'English' : 'Bahasa Indonesia'}.
 

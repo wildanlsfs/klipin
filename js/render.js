@@ -133,9 +133,13 @@ const HOOK_FONT = (size) => `900 ${size}px Impact, "Anton", "Arial Black", "Helv
 const hookCase = (t) => t.toUpperCase().replace(/\bRP(?=\s?\d)/g, 'Rp'); // "Rp100", bukan "RP100"
 function fitHook(ctx, text, maxW, maxLines, maxSize) {
   const words = hookCase(text).split(/\s+/).filter(Boolean);
+  // "HARGA Rp25 RB" yang tidak muat satu baris dipecah sebelum angkanya: "HARGA" / "Rp25 RB" (angka tidak terpotong)
+  const n = words.findIndex((x) => /^[Rr]p|^[+−-]?\d/.test(x));
+  const split = n > 0 && maxLines >= 2 ? [words.slice(0, n).join(' '), words.slice(n).join(' ')] : null;
   for (let size = maxSize; size >= 28; size -= 4) {
     ctx.font = HOOK_FONT(size);
-    const lines = wrapLines(ctx, words.join(' '), maxW);
+    const one = words.join(' ');
+    const lines = ctx.measureText(one).width <= maxW ? [one] : split || wrapLines(ctx, one, maxW);
     if (lines.length <= maxLines && lines.every((l) => ctx.measureText(l).width <= maxW)) return { size, lines };
   }
   ctx.font = HOOK_FONT(28);
@@ -148,8 +152,9 @@ function drawHook(ctx, text, w, h, alpha) {
   if (!vertical && parts.length === 2) return drawHookSides(ctx, parts, w, h, alpha);
   const maxW = w * (vertical ? 0.86 : 0.8);
   const maxSize = Math.round(vertical ? w * 0.15 : h * 0.16);
+  const same = parts.length === 2 ? Math.min(...parts.map((p) => fitHook(ctx, p, maxW, 2, maxSize).size)) : 0; // dua sisi sama besar
   const blocks = parts.length === 2
-    ? parts.map((p, k) => ({ ...fitHook(ctx, p, maxW, 2, maxSize), colors: [['#ff3b3b'], ['#3ddc63']][k] }))
+    ? parts.map((p, k) => ({ ...fitHook(ctx, p, maxW, 2, same), colors: [['#ff3b3b'], ['#3ddc63']][k] }))
     : [{ ...fitHook(ctx, parts[0] || '', maxW, 3, maxSize), colors: ['#ffd400', '#ffffff'] }];
   const gap = (blocks[0].size || 40) * 0.35;
   const heights = blocks.map((b) => b.lines.length * b.size * 1.04);
