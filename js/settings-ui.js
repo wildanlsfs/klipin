@@ -42,7 +42,7 @@ export function mountSettings(root, { onSaved, onCancel } = {}) {
     onchange: () => reloadModels('eleven'),
   });
   const elevenBox = h('div', {});
-  const ruleBoxes = { script: h('div', {}), scene: h('div', {}) };
+  const ruleBoxes = { script: h('div', {}), scene: h('div', {}), thumb: h('div', {}) };
   const styleBox = h('div', {});
 
   root.replaceChildren(
