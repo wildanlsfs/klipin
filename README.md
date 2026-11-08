@@ -3,11 +3,11 @@
 Judul → naskah → suara → scene → gambar otomatis di Google Flow → render MP4, semua dari side panel Chrome.
 Gratis & open source (MIT). Tidak ada server: semua proses (potong jeda, sinkronisasi, render video) berjalan di browser kamu.
 
-## Tutorial video (1 menit)
-[![Tonton tutorial Klipin](docs/tutorial-thumb.jpg)](https://github.com/wildanlsfs/klipin/releases/download/v1.3.1/klipin-tutorial.mp4)
+## Tutorial video (1,5 menit)
+[![Tonton tutorial Klipin](docs/tutorial-thumb.jpg)](https://github.com/wildanlsfs/klipin/releases/download/v1.8.4/klipin-tutorial.mp4)
 
-Klik gambar di atas untuk menonton / download video tutorial (MP4, 66 detik). Video ini dibuat di versi 1.3, jadi tampilannya
-sedikit berbeda; urutan langkahnya masih sama. Fitur baru dijelaskan di bagian **Alur** di bawah.
+Klik gambar di atas untuk menonton / download video tutorial (MP4, 85 detik, versi 1.8): pasang dari Releases,
+isi API key, lalu 6 langkah sampai video jadi dan siap diunggah ke YouTube.
 
 ## Pasang
 1. Download `klipin-<versi>.zip` dari [Releases](https://github.com/wildanlsfs/klipin/releases/latest)

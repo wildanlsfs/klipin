@@ -87,6 +87,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .btn.danger { background: #3a1616; border-color: var(--err); color: #fecaca; }
 .btn.ghost { background: transparent; }
 .btn.small { padding: 7px 10px; font-size: 11.5px; }
+.btn.fit { width: auto; flex: none; margin-top: 0; white-space: nowrap; } /* tombol kecil di samping kolom isian */
 .btn.big { padding: 14px; font-size: 14px; }
 .link { background: none; border: 0; color: var(--accent); cursor: pointer; font: 600 11px inherit; font-family: inherit; }
 
