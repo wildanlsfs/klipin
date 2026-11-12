@@ -73,7 +73,7 @@ export const DEFAULT_RULES = {
     { id: 'commentEnd', label: 'Pertanyaan komentar di akhir (Shorts)', for: 'short', text: 'JANGAN menyela hitungan atau penjelasan di tengah video dengan ajakan komentar; isi mengalir tanpa jeda sampai jawaban utama keluar. SATU pertanyaan komentar diletakkan di akhir, tepat setelah jawaban: dilema spesifik yang membelah opini (contoh: "Kamu pilih jual langsung ke konsumen, atau tetap lewat tengkulak?"). Hindari ajakan umum seperti "Bagaimana pendapatmu?".' },
     { id: 'cta', label: 'Ajakan di penutup', text: 'Penutup: langsung tuntaskan poin terakhir atau jawaban utama, lalu 1 kalimat ajakan (kirim video ini ke orang spesifik yang butuh, contoh: "Kirim ke teman yang lagi mulai ternak.", atau subscribe).' },
     { id: 'nofarewell', label: 'Tanpa kata pamitan', text: 'JANGAN memakai kalimat penutup yang memberi sinyal video selesai, seperti "Jadi, kesimpulannya…", "Itulah…", "Sekian video kali ini", "Terima kasih sudah menonton", atau "Sampai jumpa". Penonton langsung keluar saat mendengarnya.' },
-    { id: 'loop', label: 'Loop ke pembuka (Shorts)', for: 'short', text: 'Kalimat paling akhir (setelah ajakan) pendek dan nyambung ke kalimat pertama (mengulang kata kunci atau pertanyaan pembuka), supaya video terasa mulus saat terputar ulang.' },
+    { id: 'loop', label: 'Loop ke pembuka (Shorts; hanya jika kotak 🔁 Loop dicentang)', for: 'short', text: 'Mode loop: kalimat PERTAMA dan kalimat PALING AKHIR dirancang sebagai satu lingkaran, supaya saat video terputar ulang otomatis akhirnya terdengar menyambung ke awal. Tulis pembuka dulu, lalu tutup dengan SATU kalimat penyambung pendek (maks ±12 kata) yang MENGGANTUNG: berakhir dengan titik dua atau koma, belum selesai secara makna, dan baru "dijawab/dilengkapi" oleh kalimat pembuka saat video terulang. Suara TTS membaca titik dan tanda tanya dengan nada turun (terdengar selesai), sedangkan titik dua dan koma menahan nada, jadi hindari penutup bertitik atau bertanda tanya. JANGAN mengulang kalimat pembuka dan JANGAN terpotong di tengah kata. Contoh: penutup "Jadi sebelum kamu mulai jual maggot, ingat satu hal:" → pembuka "Maggot BSF laku Rp10 ribu, tapi untung bisa cuma Rp2 ribu."; penutup "Dan semua itu bermuara pada satu angka:" → pembuka "Untung Rp2 ribu dari Rp10 ribu." Kalimat penyambung ini menggantikan pertanyaan komentar di akhir; jangan ada kata pamitan setelahnya. Urutan akhir: jawaban utama → jalan keluar → ajakan → kalimat penyambung.' },
     { id: 'sections', label: 'Bagian jelas (video panjang)', for: 'long', text: 'Susun 4–7 bagian berurutan, masing-masing membahas satu sub-topik (nanti jadi bab YouTube). Kalimat pertama tiap bagian langsung menyebut isinya, tanpa judul bagian.' },
     { id: 'bridge', label: 'Jembatan ke video lain (video panjang)', for: 'long', text: 'Kalimat terakhir menjembatani ke topik berikutnya yang masih berkaitan (contoh: "Tapi hitungan ini tidak ada artinya kalau salah memilih bibit. Itu kita bedah di video berikutnya."), bukan pamitan.' },
     { id: 'rehook', label: 'Pancingan berkala (video panjang)', for: 'long', text: 'Setiap ±45–60 detik buka pertanyaan atau janji baru yang baru dijawab beberapa paragraf kemudian, supaya penonton bertahan. Jawaban/hitungan utama dibuka menjelang akhir, bukan di awal.' },
@@ -96,6 +96,12 @@ export const DEFAULT_RULES = {
 
 // Daftar aturan efektif: bawaan (dengan perubahan pengguna) lalu aturan tambahan pengguna.
 // Aturan bawaan bisa khusus Shorts (for: 'short', < 2 menit) atau video panjang (for: 'long').
+// Tambahan instruksi gaya suara untuk Shorts loop: nada kalimat terakhir menggantung dan energinya sama dengan pembuka.
+export const LOOP_STYLE_TAIL = {
+  id: ' Video ini diputar ulang otomatis: jaga energi, tempo, dan tinggi nada kalimat terakhir sama seperti kalimat pertama, dan bacakan kalimat terakhir dengan nada menggantung (jangan turun menutup), seolah langsung dilanjutkan.',
+  en: ' This video replays automatically: keep the energy, pace and pitch of the last sentence the same as the first, and read the last sentence with a suspended, unresolved tone (do not fall as if finished), as if it continues straight on.',
+};
+
 export const ruleApplies = (r, minutes) => !r.for || r.for === (minutes == null ? r.for : minutes < 2 ? 'short' : 'long');
 export function rulesFor(s, kind) {
   const defs = DEFAULT_RULES[kind] || [];
@@ -132,7 +138,12 @@ export function visualStyles(s) {
   ];
 }
 
-const ruleLines = (s, kind, minutes) => rulesFor(s, kind).filter((r) => r.on && r.text.trim() && ruleApplies(r, minutes))
+// Aturan naskah yang berlaku. Aturan 'loop' hanya jika kotak Loop dicentang; saat itu kalimat
+// penyambung menggantikan pertanyaan komentar di akhir ('commentEnd').
+export const scriptRules = (s, minutes, loop) => rulesFor(s, 'script').filter((r) => r.on && r.text.trim() && ruleApplies(r, minutes)
+  && (r.id === 'loop' ? !!loop : r.id === 'commentEnd' ? !loop : true));
+
+const ruleLines = (s, kind, minutes, loop) => (kind === 'script' ? scriptRules(s, minutes, loop) : rulesFor(s, kind).filter((r) => r.on && r.text.trim() && ruleApplies(r, minutes)))
   .map((r) => `- ${r.text.trim()}`).join('\n');
 
 export const OPENAI_VOICES = [
@@ -418,9 +429,9 @@ Balas HANYA JSON: {"titles": ["...", "..."]}`, (o) => Array.isArray(o) || Array.
 const countWords = (t) => (t.match(/\S+/g) || []).length;
 const cleanScript = (t) => t.trim().replace(/^\s*[#*].*$/gm, '').replace(/\*\*/g, '').replace(/\n{3,}/g, '\n\n').trim();
 
-export async function writeScript(s, { title, format, style, minutes, lang, wpm }) {
+export async function writeScript(s, { title, format, style, minutes, lang, wpm, loop }) {
   const words = Math.round(minutes * wpm);
-  const rules = ruleLines(s, 'script', minutes);
+  const rules = ruleLines(s, 'script', minutes, loop);
   let script = cleanScript(await generateText(s, 'script', `Tulis naskah voiceover untuk video YouTube faceless.
 
 Judul: "${title}"

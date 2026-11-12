@@ -22,6 +22,7 @@ const DEFAULT_STATE = {
   format: 'misteri',
   narrStyle: 'dokumenter',
   minutes: 3,
+  loop: false, // Shorts: akhir naskah menyambung ke awal
   lang: 'id',
   script: '',
   styleInstr: '',
@@ -210,7 +211,9 @@ function setupSeg(container, get, set) {
 }
 
 function refreshStyleInstr() {
-  if (!S.styleInstrEdited) S.styleInstr = narrStyle().tts[S.lang] || narrStyle().tts.id;
+  if (!S.styleInstrEdited) {
+    S.styleInstr = (narrStyle().tts[S.lang] || narrStyle().tts.id) + (S.loop && S.minutes < 2 ? llm.LOOP_STYLE_TAIL[S.lang] || llm.LOOP_STYLE_TAIL.id : '');
+  }
   $('#styleInstr').value = S.styleInstr;
 }
 
@@ -287,7 +290,9 @@ $('#refreshVoicesBtn').addEventListener('click', () => {
 
 $('#format').addEventListener('change', (e) => { S.format = e.target.value; $('#formatHint').textContent = fmtStyle().hint; save(); });
 $('#narrStyle').addEventListener('change', (e) => { S.narrStyle = e.target.value; S.styleInstrEdited = false; refreshStyleInstr(); save(); });
-$('#minutes').addEventListener('change', (e) => { S.minutes = Number(e.target.value); save(); });
+const showLoop = () => { $('#loopRow').hidden = S.minutes >= 2; $('#loop').checked = !!S.loop; };
+$('#minutes').addEventListener('change', (e) => { S.minutes = Number(e.target.value); showLoop(); refreshStyleInstr(); save(); });
+$('#loop').addEventListener('change', (e) => { S.loop = e.target.checked; refreshStyleInstr(); save(); });
 $('#script').addEventListener('input', (e) => { S.script = e.target.value; updateScriptMeta(); save(); });
 $('#styleInstr').addEventListener('input', (e) => { S.styleInstr = e.target.value; S.styleInstrEdited = true; save(); });
 
@@ -296,7 +301,7 @@ $('#writeScriptBtn').addEventListener('click', (e) => busy(e.currentTarget, '⏳
   if (!title) throw new Error('Judul masih kosong.');
   if (S.script.trim() && !confirm('Naskah yang ada akan diganti. Lanjut?')) return;
   S.script = await llm.writeScript(settings, {
-    title, format: fmtStyle(), style: narrStyle(), minutes: S.minutes, lang: S.lang, wpm: WPM[S.lang] || 150,
+    title, format: fmtStyle(), style: narrStyle(), minutes: S.minutes, lang: S.lang, wpm: WPM[S.lang] || 150, loop: S.loop,
   });
   $('#script').value = S.script;
   updateScriptMeta();
@@ -1549,7 +1554,7 @@ const agentTools = {
         `TTS engine: ${ttsLines.join(', ')}`,
         `Suara Gemini: ${VOICES.map((v) => `${v.name} (${v.gender === 'L' ? 'pria' : 'wanita'}, ${v.desc})`).join('; ')}`,
         `Suara OpenAI: ${llm.OPENAI_VOICES.map((v) => v.id).join(', ')}`,
-        `Aturan naskah aktif (⚙︎ Pengaturan; durasi proyek ini ${S.minutes} menit):\n${llm.rulesFor(settings, 'script').filter((r) => r.on && r.text.trim() && llm.ruleApplies(r, S.minutes)).map((r) => `- ${r.text.trim()}`).join('\n')}`,
+        `Aturan naskah aktif (⚙︎ Pengaturan; durasi proyek ini ${S.minutes} menit):\n${llm.scriptRules(settings, S.minutes, S.loop).map((r) => `- ${r.text.trim()}`).join('\n')}`,
       ].join('\n'),
     };
   },
@@ -1586,12 +1591,13 @@ const agentTools = {
     return { text: `Judul: ${S.title}` };
   },
 
-  async write_script({ format, narration_style, minutes, lang, script }, progress) {
+  async write_script({ format, narration_style, minutes, lang, loop, script }, progress) {
     go(2);
     S.format = pickId(FORMATS, format, 'format') || S.format;
     const ns = pickId(NARRATION_STYLES, narration_style, 'narration_style');
     if (ns && ns !== S.narrStyle) { S.narrStyle = ns; S.styleInstrEdited = false; }
     if (minutes) S.minutes = Number(minutes);
+    if (typeof loop === 'boolean') { S.loop = loop; refreshStyleInstr(); }
     if (lang) S.lang = lang === 'en' ? 'en' : 'id';
     if (script) {
       S.script = String(script).trim();
@@ -1600,7 +1606,7 @@ const agentTools = {
       if (!title) throw new Error('Judul masih kosong — panggil klipin_titles atau klipin_set_title dulu.');
       progress('menulis naskah…');
       S.script = await llm.writeScript(settings, {
-        title, format: fmtStyle(), style: narrStyle(), minutes: S.minutes, lang: S.lang, wpm: WPM[S.lang] || 150,
+        title, format: fmtStyle(), style: narrStyle(), minutes: S.minutes, lang: S.lang, wpm: WPM[S.lang] || 150, loop: S.loop,
       });
     }
     initUI();
@@ -1863,6 +1869,7 @@ function initUI() {
   fillSelect($('#format'), FORMATS.map((f) => [f.id, f.label]), S.format);
   fillSelect($('#narrStyle'), NARRATION_STYLES.map((n) => [n.id, n.label]), S.narrStyle);
   fillSelect($('#minutes'), DURATIONS.map((m) => [m, `± ${m} menit`]), S.minutes);
+  showLoop();
   $('#formatHint').textContent = fmtStyle().hint;
   $('#script').value = S.script;
   updateScriptMeta();

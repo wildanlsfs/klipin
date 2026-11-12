@@ -73,6 +73,7 @@ const TOOLS = [
       narration_style: str('Narration style id (see klipin_options)'),
       minutes: num('Target length in minutes (1, 2, 3, 5, 8, 10, 15)'),
       lang: str('Language', { enum: ['id', 'en'] }),
+      loop: { type: 'boolean', description: 'Shorts only (minutes < 2): write the last sentence so it connects back to the first, for a seamless replay loop. Replaces the closing comment question. Default: keep the project setting (off).' },
       script: str('Use this exact script instead of generating one'),
     }),
   },

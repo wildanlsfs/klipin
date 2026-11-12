@@ -70,8 +70,12 @@ API key tetap di extension dan tidak dikirim ke agent. Matikan kapan saja lewat 
   - pembuka 3 detik dan inti dalam 10 detik; padat informasi; enak dibacakan TTS;
   - **pertanyaan komentar**: di Shorts diletakkan di akhir setelah jawaban (tidak menyela hitungan), di video panjang di sepertiga awal;
   - **jalan keluar, bukan hanya masalah**: kalau hitungan berujung tipis/rugi, naskah memberi cara konkret supaya untung;
-  - **tanpa kata pamitan** ("Sekian…", "Terima kasih sudah menonton"); ajakan penutup; loop ke pembuka (Shorts);
+  - **tanpa kata pamitan** ("Sekian…", "Terima kasih sudah menonton"); ajakan penutup;
     jembatan ke topik berikutnya (video panjang).
+  - **Loop (Shorts):** di langkah 2 ada kotak **🔁 Loop** (muncul kalau durasi di bawah 2 menit). Kalau dicentang, naskah ditutup
+    dengan satu kalimat menggantung (berakhir titik dua atau koma) yang dilengkapi kalimat pembuka saat video terulang otomatis,
+    dan instruksi gaya suara ditambah permintaan agar nada dan energi akhir sama dengan awal. Tanpa dicentang, naskah ditutup
+    dengan pertanyaan komentar seperti biasa.
 - **Aturan prompt gambar** bawaan termasuk tokoh berulang dengan ciri tetap (pihak yang merugikan digambar sebagai antagonis
   yang mudah dikenali) supaya gambar antar scene konsisten.
 - **Gaya visual:** prompt gaya bawaan bisa diganti, dan kamu bisa menambah gaya sendiri (muncul di pilihan langkah 3 dan di `klipin_options`).
