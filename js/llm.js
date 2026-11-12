@@ -90,6 +90,8 @@ export const DEFAULT_RULES = {
     { id: 'honest', label: 'Jujur sesuai isi', text: 'Setiap angka dan klaim di teks harus ada di naskah. Gambar memperlihatkan hal yang benar-benar dibahas di video, bukan hal yang lebih heboh.' },
     { id: 'specific', label: 'Subjek spesifik', text: 'Gambar memakai benda, hewan, tempat, atau tokoh yang disebut di naskah (sebutkan namanya di prompt), bukan simbol umum seperti tumpukan koin atau tanda tanya polos.' },
     { id: 'mobile', label: 'Terbaca di HP', text: 'Satu titik fokus, maks 2 tokoh, ekspresi dan objek besar. Teks maks 4 kata (atau 2×3 kata untuk jenis dua sisi) dan tidak bertumpuk dengan subjek.' },
+    { id: 'context', label: 'Konteks jelas', text: 'Penonton harus paham taruhannya hanya dari teks + gambar. Kalau angkanya saja bisa berarti apa pun (mis. "830 KG?" atau "Rp750 RIBU?"), sebut apa yang dibahas di teks (komoditas, usaha, atau benda: "NILA: 830 KG PAKAN?") dan perlihatkan benda itu besar di gambar. Utamakan kontras dua sisi (sebelum–sesudah, harga A vs harga B) karena paling cepat dipahami.' },
+    { id: 'fresh', label: 'Variasi antar video', text: 'Jangan membuat semua thumbnail terlihat sama. Variasikan ekspresi tokoh (kaget, bingung, curiga, tersenyum, mengangkat bahu), warna aksen, dan posisi benda; jangan selalu wajah kaget bermulut terbuka. Tanda tanya di teks maksimal satu dan tidak di setiap thumbnail: pernyataan angka tanpa "?" juga boleh.' },
     { id: 'notext', label: 'Gambar tanpa tulisan', text: 'Prompt gambar wajib menyebut tanpa teks, huruf, angka, logo, atau watermark di gambar; teks ditambahkan Klipin.' },
   ],
 };
