@@ -1552,9 +1552,15 @@ const agentTools = {
         `minutes: ${DURATIONS.join(', ')}`,
         `thumbnail types (klipin_thumb_concepts; ⭐ = cocok untuk format proyek ini): ${THUMB_TYPES.map((t) => `${t.id}${recommendedTypes().includes(t.id) ? '⭐' : ''} (${t.label})`).join(', ')}`,
         `TTS engine: ${ttsLines.join(', ')}`,
+        `Model AI per tugas (⚙︎ Pengaturan; fallback ${settings.fallback ? 'aktif' : 'mati'}): ${Object.entries(llm.TASKS).map(([k, label]) => {
+          const id = settings.tasks?.[k] || 'gemini';
+          const c = (settings.compat || []).find((x) => x.id === id);
+          const model = id === 'gemini' ? settings.gemini?.model : c?.model;
+          return `${label} → ${c?.name || id} (${model || 'model belum diisi'})`;
+        }).join('; ')}; model suara Gemini: ${settings.gemini?.ttsModel}`,
         `Suara Gemini: ${VOICES.map((v) => `${v.name} (${v.gender === 'L' ? 'pria' : 'wanita'}, ${v.desc})`).join('; ')}`,
         `Suara OpenAI: ${llm.OPENAI_VOICES.map((v) => v.id).join(', ')}`,
-        `Aturan naskah aktif (⚙︎ Pengaturan; durasi proyek ini ${S.minutes} menit):\n${llm.scriptRules(settings, S.minutes, S.loop).map((r) => `- ${r.text.trim()}`).join('\n')}`,
+        `Aturan naskah aktif (⚙︎ Pengaturan; durasi proyek ini ${S.minutes} menit):\n${llm.scriptRules(settings, S.minutes, S.loop, fmtStyle().skipRules).map((r) => `- ${r.text.trim()}`).join('\n')}`,
       ].join('\n'),
     };
   },

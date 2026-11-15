@@ -78,6 +78,12 @@ API key tetap di extension dan tidak dikirim ke agent. Matikan kapan saja lewat 
     dengan pertanyaan komentar seperti biasa.
 - **Aturan prompt gambar** bawaan termasuk tokoh berulang dengan ciri tetap (pihak yang merugikan digambar sebagai antagonis
   yang mudah dikenali) supaya gambar antar scene konsisten.
+- **Format konten** punya panduan penulisan sendiri yang dirancang untuk menahan penonton sampai akhir, dan tidak terikat pada satu niche:
+  Misteri, Sejarah Penemuan, Bagaimana Jika, Kronologi, Explainer, Biografi, Top List, Investigasi, serta tiga yang baru:
+  **Rantai Masalah–Solusi** (satu tokoh, tiap solusi memunculkan masalah baru), **Cerita Narasi** (prosa seperti novel dengan tokoh dan dialog,
+  dibacakan satu suara), dan **Seluruh Perjalanan** (ringkasan besar satu subjek dari awal sampai hari ini, untuk video panjang).
+- **Editor retensi:** setelah naskah ditulis, satu pemeriksaan otomatis memperbaiki bagian yang datar, membocorkan jawaban, berulang,
+  atau berisi angka yang meragukan. Hanya bagian yang gagal diubah.
 - **Gaya visual:** prompt gaya bawaan bisa diganti, dan kamu bisa menambah gaya sendiri (muncul di pilihan langkah 3 dan di `klipin_options`).
 - Sebagian aturan bawaan hanya berlaku untuk Shorts (< 2 menit, mis. loop ke pembuka) atau video panjang
   (bagian jelas untuk bab, pancingan berkala).

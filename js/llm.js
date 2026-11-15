@@ -63,26 +63,28 @@ export const DEFAULT_SETTINGS = {
 export const DEFAULT_RULES = {
   script: [
     { id: 'hook', label: 'Pembuka 3 detik', text: 'Kalimat PERTAMA (≤3 detik, maks ±10 kata) langsung ke inti: klaim tajam, kontras, atau angka mengejutkan tentang topik. Tanpa salam, tanpa pengantar ("Pernahkah kamu…", "Di video ini…"), tanpa menjelaskan latar dulu. Kalimat kedua memberi alasan untuk terus menonton (janji jawaban/akibat).' },
-    { id: 'core10', label: 'Inti dalam 10 detik', text: 'Dalam 10 detik pertama (±3 kalimat) sudah muncul angka/kontras inti yang konkret (contoh: margin A vs margin B). JANGAN membuka dengan simulasi panjang ("Misalnya kamu beli 10 kg…", "Bayangkan…"). Hitungan atau contoh baru boleh SETELAH kontras inti disebut, dan dibuat ringkas.' },
+    { id: 'core10', label: 'Inti dalam 10 detik', text: 'Dalam 10 detik pertama (±3 kalimat) sudah muncul angka/kontras inti yang konkret (bentuknya: hasil atau angka A dibandingkan dengan hasil atau angka B). JANGAN membuka dengan simulasi panjang ("Misalnya kamu beli 10 kg…", "Bayangkan…"). Hitungan atau contoh baru boleh SETELAH kontras inti disebut, dan dibuat ringkas.' },
     { id: 'comment', label: 'Pertanyaan komentar (video panjang)', for: 'long', text: 'Di sepertiga awal video (sekitar 25–40% durasi), sisipkan SATU pertanyaan komentar berupa dilema spesifik dari pengalaman penonton, terkait langsung dengan bagian yang sedang dibahas (contoh: "Pernah hitung susut bobot waktu bikin fillet? Berapa persen? Tulis di komentar."). Hindari ajakan umum seperti "Bagaimana pendapatmu?". Setelah itu lanjutkan isi seperti biasa.' },
     { id: 'density', label: 'Padat informasi', text: 'Setiap 1–2 kalimat harus memberi informasi baru (fakta, angka, akibat, atau perbandingan). Tanpa kalimat pengisi, pengulangan, atau basa-basi transisi ("Nah, sekarang kita bahas…").' },
     { id: 'narration', label: 'Hanya narasi', text: 'Hanya teks yang dibacakan narator. TANPA judul bagian, label adegan, instruksi visual, tanda kurung, emoji, markdown, atau nomor.' },
     { id: 'tts', label: 'Enak dibacakan TTS', text: 'Paragraf pendek (2–4 kalimat), dipisah baris kosong. Kalimat tidak terlalu panjang supaya enak dibacakan TTS.' },
     { id: 'facts', label: 'Fakta akurat', text: 'Fakta harus akurat; jika ada yang belum pasti, sebutkan sebagai dugaan/teori.' },
-    { id: 'wayforward', label: 'Jalan keluar, bukan hanya masalah', text: 'Kalau hitungan atau ceritanya berujung tipis, rugi, atau merugikan, jangan berhenti di situ: sebelum penutup, beri jalan keluar konkret yang bisa dilakukan penonton (syarat supaya untung, mis. skala atau harga jual minimal; cara menekan biaya terbesar; atau pilihan yang lebih baik). Tetap jujur: jangan membesar-besarkan untung maupun rugi.' },
-    { id: 'commentEnd', label: 'Pertanyaan komentar di akhir (Shorts)', for: 'short', text: 'JANGAN menyela hitungan atau penjelasan di tengah video dengan ajakan komentar; isi mengalir tanpa jeda sampai jawaban utama keluar. SATU pertanyaan komentar diletakkan di akhir, tepat setelah jawaban: dilema spesifik yang membelah opini (contoh: "Kamu pilih jual langsung ke konsumen, atau tetap lewat tengkulak?"). Hindari ajakan umum seperti "Bagaimana pendapatmu?".' },
-    { id: 'cta', label: 'Ajakan di penutup', text: 'Penutup: langsung tuntaskan poin terakhir atau jawaban utama, lalu 1 kalimat ajakan (kirim video ini ke orang spesifik yang butuh, contoh: "Kirim ke teman yang lagi mulai ternak.", atau subscribe).' },
+    { id: 'wayforward', label: 'Jalan keluar, bukan hanya masalah', text: 'Kalau hitungan atau ceritanya berujung tipis, rugi, atau merugikan, jangan berhenti di situ: sebelum penutup, beri jalan keluar konkret yang bisa dilakukan penonton (syarat supaya untung, mis. syarat minimal atau batas yang membuat hasilnya aman; cara menekan biaya terbesar; atau pilihan yang lebih baik). Tetap jujur: jangan membesar-besarkan untung maupun rugi.' },
+    { id: 'commentEnd', label: 'Pertanyaan komentar di akhir (Shorts)', for: 'short', text: 'JANGAN menyela hitungan atau penjelasan di tengah video dengan ajakan komentar; isi mengalir tanpa jeda sampai jawaban utama keluar. SATU pertanyaan komentar diletakkan di akhir, tepat setelah jawaban: dilema spesifik yang membelah opini (bentuknya: "Kamu pilih [pilihan A], atau [pilihan B]?"). Hindari ajakan umum seperti "Bagaimana pendapatmu?".' },
+    { id: 'cta', label: 'Ajakan di penutup', text: 'Penutup: langsung tuntaskan poin terakhir atau jawaban utama, lalu 1 kalimat ajakan (kirim video ini ke orang spesifik yang butuh, bentuknya: "Kirim ke [orang spesifik] yang sedang [kegiatan yang relevan dengan topik].", atau subscribe).' },
     { id: 'nofarewell', label: 'Tanpa kata pamitan', text: 'JANGAN memakai kalimat penutup yang memberi sinyal video selesai, seperti "Jadi, kesimpulannya…", "Itulah…", "Sekian video kali ini", "Terima kasih sudah menonton", atau "Sampai jumpa". Penonton langsung keluar saat mendengarnya.' },
-    { id: 'loop', label: 'Loop ke pembuka (Shorts; hanya jika kotak 🔁 Loop dicentang)', for: 'short', text: 'Mode loop: kalimat PERTAMA dan kalimat PALING AKHIR dirancang sebagai satu lingkaran, supaya saat video terputar ulang otomatis akhirnya terdengar menyambung ke awal. Tulis pembuka dulu, lalu tutup dengan SATU kalimat penyambung pendek (maks ±12 kata) yang MENGGANTUNG: berakhir dengan titik dua atau koma, belum selesai secara makna, dan baru "dijawab/dilengkapi" oleh kalimat pembuka saat video terulang. Suara TTS membaca titik dan tanda tanya dengan nada turun (terdengar selesai), sedangkan titik dua dan koma menahan nada, jadi hindari penutup bertitik atau bertanda tanya. JANGAN mengulang kalimat pembuka dan JANGAN terpotong di tengah kata. Contoh: penutup "Jadi sebelum kamu mulai jual maggot, ingat satu hal:" → pembuka "Maggot BSF laku Rp10 ribu, tapi untung bisa cuma Rp2 ribu."; penutup "Dan semua itu bermuara pada satu angka:" → pembuka "Untung Rp2 ribu dari Rp10 ribu." Kalimat penyambung ini menggantikan pertanyaan komentar di akhir; jangan ada kata pamitan setelahnya. Urutan akhir: jawaban utama → jalan keluar → ajakan → kalimat penyambung.' },
+    { id: 'loop', label: 'Loop ke pembuka (Shorts; hanya jika kotak 🔁 Loop dicentang)', for: 'short', text: 'Mode loop: kalimat PERTAMA dan kalimat PALING AKHIR dirancang sebagai satu lingkaran, supaya saat video terputar ulang otomatis akhirnya terdengar menyambung ke awal. Tulis pembuka dulu, lalu tutup dengan SATU kalimat penyambung pendek (maks ±12 kata) yang MENGGANTUNG: berakhir dengan titik dua atau koma, belum selesai secara makna, dan baru "dijawab/dilengkapi" oleh kalimat pembuka saat video terulang. Suara TTS membaca titik dan tanda tanya dengan nada turun (terdengar selesai), sedangkan titik dua dan koma menahan nada, jadi hindari penutup bertitik atau bertanda tanya. JANGAN mengulang kalimat pembuka dan JANGAN terpotong di tengah kata. Bentuknya (isi dari topik videonya, jangan menyalin kata contoh): penutup "Jadi sebelum kamu [melakukan hal yang dibahas], ingat satu hal:" → pembuka "[klaim atau angka inti topik ini]."; penutup "Dan semua itu bermuara pada satu angka:" → pembuka "[angka inti topik ini]." Kalimat penyambung ini menggantikan pertanyaan komentar di akhir; jangan ada kata pamitan setelahnya. Urutan akhir: jawaban utama → jalan keluar → ajakan → kalimat penyambung.' },
     { id: 'sections', label: 'Bagian jelas (video panjang)', for: 'long', text: 'Susun 4–7 bagian berurutan, masing-masing membahas satu sub-topik (nanti jadi bab YouTube). Kalimat pertama tiap bagian langsung menyebut isinya, tanpa judul bagian.' },
-    { id: 'bridge', label: 'Jembatan ke video lain (video panjang)', for: 'long', text: 'Kalimat terakhir menjembatani ke topik berikutnya yang masih berkaitan (contoh: "Tapi hitungan ini tidak ada artinya kalau salah memilih bibit. Itu kita bedah di video berikutnya."), bukan pamitan.' },
+    { id: 'bridge', label: 'Jembatan ke video lain (video panjang)', for: 'long', text: 'Kalimat terakhir menjembatani ke topik berikutnya yang masih berkaitan (bentuknya: "Tapi [hal ini] tidak ada artinya kalau [kondisi yang sering terlewat]. Itu kita bedah di video berikutnya."), bukan pamitan.' },
     { id: 'rehook', label: 'Pancingan berkala (video panjang)', for: 'long', text: 'Setiap ±45–60 detik buka pertanyaan atau janji baru yang baru dijawab beberapa paragraf kemudian, supaya penonton bertahan. Jawaban/hitungan utama dibuka menjelang akhir, bukan di awal.' },
   ],
   scene: [
     { id: 'describe', label: 'Isi prompt', text: '1–3 kalimat, deskripsikan subjek, aksi, latar, komposisi kamera, dan suasana yang MENGGAMBARKAN isi narasi.' },
     { id: 'stylefirst', label: 'Gaya di depan', text: 'Selalu awali dengan deskripsi gaya visual di atas agar konsisten.' },
-    { id: 'hookimg', label: 'Scene 1 = hook', text: 'Scene 1 adalah hook: buat gambar paling mencolok yang langsung MEMPERLIHATKAN kontras/klaim di narasinya (mis. dua pilihan berdampingan, sebelum–sesudah, perbandingan besar–kecil), bukan suasana pembuka.' },
-    { id: 'cast', label: 'Tokoh berulang & antagonis', text: 'Tokoh yang muncul berulang diberi ciri tetap yang sama di setiap scene (mis. peternak bercaping, pembeli membawa tas belanja). Pihak yang merugikan dalam cerita (tengkulak, rentenir, biaya tak terduga) digambarkan sebagai tokoh antagonis dengan ciri jelas yang konsisten, mis. stickman berkacamata hitam dan berjas, supaya cerita terasa seperti drama.' },
+    { id: 'hookimg', label: 'Scene 1 = hook', text: 'Scene 1 adalah hook visual: gambar paling mencolok dan langsung terbaca yang memperlihatkan inti pembuka narasi (kontras atau klaim; atau momen paling genting/janggal kalau narasinya cerita), bukan suasana pembuka, dan tanpa membocorkan jawaban yang sengaja ditahan narasi.' },
+    { id: 'variety', label: 'Visual berganti bermakna', text: 'Tiap scene harus jelas berbeda dari scene sebelumnya (sudut kamera lebar, dekat, atau dari atas; komposisi; objek utama); jangan dua scene berturut-turut dengan komposisi yang sama. Ganti visual ketika maknanya berganti, dan satu gambar hanya memuat apa yang dibutuhkan kalimatnya.' },
+    { id: 'safezone', label: 'Area aman vertikal', text: 'Untuk rasio vertikal 9:16, taruh subjek dan objek penting di bagian tengah-atas gambar; hindari 25% bagian bawah (tertutup subtitle dan antarmuka) dan tepi kanan.' },
+    { id: 'cast', label: 'Tokoh berulang & antagonis', text: 'Tokoh yang muncul berulang diberi ciri tetap yang sama di setiap scene (mis. tokoh utama dengan topi dan warna baju tetap, pembeli membawa tas belanja). Pihak yang merugikan dalam cerita (perantara yang mengambil untung, pesaing, atau biaya tak terduga) digambarkan sebagai tokoh antagonis dengan ciri jelas yang konsisten, mis. stickman berkacamata hitam dan berjas, supaya cerita terasa seperti drama.' },
     { id: 'safe', label: 'Tanpa teks & aman', text: 'Tanpa teks/tulisan/huruf/watermark di gambar. Hindari tokoh nyata yang dikenali, kekerasan grafis, dan konten sensitif.' },
   ],
   thumb: [
@@ -90,7 +92,7 @@ export const DEFAULT_RULES = {
     { id: 'honest', label: 'Jujur sesuai isi', text: 'Setiap angka dan klaim di teks harus ada di naskah. Gambar memperlihatkan hal yang benar-benar dibahas di video, bukan hal yang lebih heboh.' },
     { id: 'specific', label: 'Subjek spesifik', text: 'Gambar memakai benda, hewan, tempat, atau tokoh yang disebut di naskah (sebutkan namanya di prompt), bukan simbol umum seperti tumpukan koin atau tanda tanya polos.' },
     { id: 'mobile', label: 'Terbaca di HP', text: 'Satu titik fokus, maks 2 tokoh, ekspresi dan objek besar. Teks maks 4 kata (atau 2×3 kata untuk jenis dua sisi) dan tidak bertumpuk dengan subjek.' },
-    { id: 'context', label: 'Konteks jelas', text: 'Penonton harus paham taruhannya hanya dari teks + gambar. Kalau angkanya saja bisa berarti apa pun (mis. "830 KG?" atau "Rp750 RIBU?"), sebut apa yang dibahas di teks (komoditas, usaha, atau benda: "NILA: 830 KG PAKAN?") dan perlihatkan benda itu besar di gambar. Utamakan kontras dua sisi (sebelum–sesudah, harga A vs harga B) karena paling cepat dipahami.' },
+    { id: 'context', label: 'Konteks jelas', text: 'Penonton harus paham taruhannya hanya dari teks + gambar. Kalau angkanya saja bisa berarti apa pun (mis. "830 KG?" atau "Rp750 RIBU?"), sebut apa yang dibahas di teks (komoditas, usaha, atau benda; bentuknya "[BENDA]: [ANGKA] [SATUAN]?") dan perlihatkan benda itu besar di gambar. Utamakan kontras dua sisi (sebelum–sesudah, harga A vs harga B) karena paling cepat dipahami.' },
     { id: 'fresh', label: 'Variasi antar video', text: 'Jangan membuat semua thumbnail terlihat sama. Variasikan ekspresi tokoh (kaget, bingung, curiga, tersenyum, mengangkat bahu), warna aksen, dan posisi benda; jangan selalu wajah kaget bermulut terbuka. Tanda tanya di teks maksimal satu dan tidak di setiap thumbnail: pernyataan angka tanpa "?" juga boleh.' },
     { id: 'notext', label: 'Gambar tanpa tulisan', text: 'Prompt gambar wajib menyebut tanpa teks, huruf, angka, logo, atau watermark di gambar; teks ditambahkan Klipin.' },
   ],
@@ -100,8 +102,8 @@ export const DEFAULT_RULES = {
 // Aturan bawaan bisa khusus Shorts (for: 'short', < 2 menit) atau video panjang (for: 'long').
 // Tambahan instruksi gaya suara untuk Shorts loop: nada kalimat terakhir menggantung dan energinya sama dengan pembuka.
 export const LOOP_STYLE_TAIL = {
-  id: ' Video ini diputar ulang otomatis: jaga energi, tempo, dan tinggi nada kalimat terakhir sama seperti kalimat pertama, dan bacakan kalimat terakhir dengan nada menggantung (jangan turun menutup), seolah langsung dilanjutkan.',
-  en: ' This video replays automatically: keep the energy, pace and pitch of the last sentence the same as the first, and read the last sentence with a suspended, unresolved tone (do not fall as if finished), as if it continues straight on.',
+  id: ' Video ini diputar ulang otomatis: kalimat terakhir dibacakan dengan energi, tempo, dan tinggi nada yang sama dengan kalimat pertama, nada naik sedikit dan menggantung seperti kalimat yang belum selesai, lalu langsung menyambung ke awal.',
+  en: ' This video replays automatically: read the last sentence with the same energy, pace and pitch as the first, with the tone rising slightly and left hanging like an unfinished sentence, flowing straight back into the start.',
 };
 
 export const ruleApplies = (r, minutes) => !r.for || r.for === (minutes == null ? r.for : minutes < 2 ? 'short' : 'long');
@@ -142,10 +144,10 @@ export function visualStyles(s) {
 
 // Aturan naskah yang berlaku. Aturan 'loop' hanya jika kotak Loop dicentang; saat itu kalimat
 // penyambung menggantikan pertanyaan komentar di akhir ('commentEnd').
-export const scriptRules = (s, minutes, loop) => rulesFor(s, 'script').filter((r) => r.on && r.text.trim() && ruleApplies(r, minutes)
-  && (r.id === 'loop' ? !!loop : r.id === 'commentEnd' ? !loop : true));
+export const scriptRules = (s, minutes, loop, skip = []) => rulesFor(s, 'script').filter((r) => r.on && r.text.trim() && ruleApplies(r, minutes)
+  && !skip.includes(r.id) && (r.id === 'loop' ? !!loop : r.id === 'commentEnd' ? !loop : true));
 
-const ruleLines = (s, kind, minutes, loop) => (kind === 'script' ? scriptRules(s, minutes, loop) : rulesFor(s, kind).filter((r) => r.on && r.text.trim() && ruleApplies(r, minutes)))
+const ruleLines = (s, kind, minutes, loop, skip) => (kind === 'script' ? scriptRules(s, minutes, loop, skip) : rulesFor(s, kind).filter((r) => r.on && r.text.trim() && ruleApplies(r, minutes)))
   .map((r) => `- ${r.text.trim()}`).join('\n');
 
 export const OPENAI_VOICES = [
@@ -433,17 +435,34 @@ const cleanScript = (t) => t.trim().replace(/^\s*[#*].*$/gm, '').replace(/\*\*/g
 
 export async function writeScript(s, { title, format, style, minutes, lang, wpm, loop }) {
   const words = Math.round(minutes * wpm);
-  const rules = ruleLines(s, 'script', minutes, loop);
-  let script = cleanScript(await generateText(s, 'script', `Tulis naskah voiceover untuk video YouTube faceless.
+  const rules = ruleLines(s, 'script', minutes, loop, format.skipRules);
+  let script = cleanScript(await generateText(s, 'script', `<peran>
+Kamu penulis naskah voiceover untuk video YouTube faceless. Tujuanmu satu: penonton bertahan sampai kalimat terakhir. Kamu menulis untuk telinga, dibacakan satu suara.
+</peran>
 
+<brief>
 Judul: "${title}"
 Format konten: ${format.label} — ${format.hint}
 Gaya narasi: ${style.script}
 Target durasi: ±${minutes} menit (≈${words} kata, toleransi ±10%)
 Bahasa: ${lang === 'en' ? 'English' : 'Bahasa Indonesia yang natural (bukan terjemahan kaku)'}
+</brief>
+${format.guide ? `
+<panduan_format>
+${format.guide}
+</panduan_format>
+` : ''}
+<aturan>
+${rules}
+</aturan>
 
-Aturan:
-${rules}`));
+<cara_menulis>
+Rencanakan dulu urutan kejadian dan di mana tiap pertanyaan dibuka dan dijawab, lalu tulis naskahnya. Pakai tahun dan nama yang pasti; untuk angka kecil yang tidak kamu yakini, pakai gambaran, bukan tebakan. Jangan mengaburkan kejadian: tulis siapa melakukan apa dan akibatnya secara konkret. Utamakan kejadian konkret dan orang sungguhan di atas penjelasan umum. Kalau panduan format dan aturan umum bertabrakan, ikuti panduan format.
+</cara_menulis>
+
+<keluaran>
+Balas hanya dengan teks naskah yang dibacakan narator.
+</keluaran>`));
   // AI sering meleset jauh dari target kata (terutama naskah panjang) → satu kali revisi panjang naskah
   const n = countWords(script);
   if (n < words * 0.85 || n > words * 1.2) {
@@ -459,7 +478,70 @@ ${script}
 Balas hanya dengan naskah barunya.`));
     if (Math.abs(countWords(fixed) - words) < Math.abs(n - words)) script = fixed;
   }
-  return script;
+  return editRetention(s, { script, title, format, style, words, rules });
+}
+
+// Editor retensi: satu kali pemeriksaan naskah dengan daftar periksa yang tidak bergantung pada niche.
+// Hanya bagian yang gagal diperbaiki; hasilnya dibuang kalau panjangnya meleset atau kosong.
+async function editRetention(s, { script, title, format, style, words, rules }) {
+  try {
+    const edited = cleanScript(await generateText(s, 'script', `<peran>
+Kamu editor naskah video yang tugasnya satu: membuat penonton bertahan sampai kalimat terakhir. Kamu memperbaiki naskah yang sudah ada, bukan menulis dari nol.
+</peran>
+
+<cara_kerja>
+1. Baca naskah sambil membayangkan penonton yang siap menggeser layar kapan saja.
+2. Untuk tiap butir di <daftar_periksa>, tentukan lulus atau gagal.
+3. Tulis ulang HANYA kalimat atau paragraf yang gagal. Bagian yang lulus disalin persis, kata demi kata.
+4. Panjang total harus ±${words} kata (jangan lebih pendek dari ${Math.round(words * 0.95)} kata). Kalau ada bagian yang dihapus, ganti dengan isi baru yang lebih kuat, bukan memangkas.
+</cara_kerja>
+
+<daftar_periksa>
+A. Pembuka: tiga detik pertama berupa kejadian, kejanggalan, atau kontras yang terbayang, bukan rangkuman abstrak, dan tidak membocorkan jawaban kecuali panduan format memintanya.
+B. Tengah: kira-kira tiap 25–40 kata ada kejutan, pertanyaan baru, atau perubahan keadaan. Cari bagian datar dan beri satu kejadian konkret.
+C. Orang: bagian yang hanya berisi lembaga, sistem, atau definisi diberi satu kejadian dengan orang atau peristiwa yang sungguh tercatat. Tokoh rekaan ("seorang pedagang") paling banyak dua kali di seluruh naskah.
+D. Variasi: kerangka kalimat atau frasa pemutus yang sama tidak muncul dua kali. Contoh pola yang harus dibuang: tiga paragraf berturut-turut berawalan "Seorang … menghadapi pilihan".
+E. Padat: tiap kalimat memberi informasi baru; hapus pengisi dan pengulangan.
+F. Angka: hanya yang dibutuhkan, dan tidak ada deretan angka seperti pembukuan.
+G. Bahasa: lisan sehari-hari, kalimat pendek, enak dibacakan satu suara. Kata ragu ("dapat", "relatif", "semacam") diganti kalimat tegas kecuali klaimnya memang diperdebatkan.
+H. Fakta: periksa tiap angka, tahun, nama. Kalau ragu, pakai kisaran atau hapus kalimatnya.
+I. Batas: tanpa nasihat atau perintah kepada penonton soal uang atau investasi (kecuali format memintanya), dan tanpa pembahasan bunga, riba, atau judi.
+J. Pertanyaan komentar (kalau ada): satu kalimat, dua pilihan jelas, tidak memutus puncak cerita.
+K. Penutup: kalimat terakhir adalah poin atau tesis terkuat, kecuali aturan di bawah menyuruh ajakan.
+L. Cakupan: untuk naskah yang menelusuri sejarah atau perjalanan, tidak ada babak besar yang dilompati (kekuatan, wilayah, atau teknologi yang penting bagi subjek). Kalau ada celah, tambahkan satu babak ringkas dengan tokoh dan angka nyata.
+M. Sambungan: tiap perpindahan babak atau wilayah punya kalimat penghubung yang menjelaskan kenapa cerita berpindah; hapus lompatan mendadak.
+N. Angka peka waktu: batas, tarif, harga, jumlah pengguna, dan peringkat dihapus atau diberi keterangan waktu.
+O. Angka kecil yang mudah keliru (jumlah tempat, bobot, kapasitas, tahun penemuan teknis) diganti gambaran kecuali kamu sangat yakin. Ini TIDAK berlaku untuk nama, tindakan, dan akibat peristiwa yang tercatat: itu harus tetap lengkap dan konkret.
+P. Adegan: tiap bagian cerita memuat siapa melakukan apa dan apa akibatnya bagi dia. Bagian yang hanya berisi refleksi abstrak ("Perubahan ini menaikkan…", "Pertanyaan lama muncul kembali") ditulis ulang menjadi kejadian; refleksi abstrak maksimal sekali per tiga bagian.
+Q. Pertanyaan komentar tanpa klausa penjelas.
+</daftar_periksa>
+
+<contoh>
+Ini hanya kerangka bentuk. Isi dan tokohnya selalu diambil dari naskah yang sedang kamu edit; jangan menyalin kata atau tokoh dari contoh.
+Sebelum (gagal C dan D): "Seorang [pelaku] menghadapi pilihan baru ketika [perubahan terjadi]."
+Sesudah (lulus): "[Tokoh bernama] melakukan [tindakan spesifik]. Pada [tahun], [akibat nyata yang tercatat]."
+</contoh>
+
+<konteks>
+Judul: "${title}"
+Format: ${format.label}${format.guide ? `\nPanduan format:\n${format.guide}` : ''}
+Gaya narasi: ${style.script}
+Aturan tambahan yang tetap berlaku:
+${rules}
+</konteks>
+
+<naskah>
+${script}
+</naskah>
+
+<keluaran>
+Balas hanya dengan naskah akhir yang utuh, tanpa catatan, judul, atau penjelasan.
+</keluaran>`));
+    const n = countWords(edited);
+    return edited && n >= words * 0.9 && n <= words * 1.25 ? edited : script;
+  } catch {
+    return script;
+  }
 }
 
 export async function scenePrompts(s, { title, visualStyle, ratio, scenes, characterNote }) {
@@ -467,7 +549,7 @@ export async function scenePrompts(s, { title, visualStyle, ratio, scenes, chara
   const out = await generateJSON(s, 'scene', `Kamu adalah art director untuk video faceless "${title}".
 Buat prompt gambar (Bahasa Inggris) untuk setiap scene narasi di bawah. Gambar akan dibuat dengan Google Flow (Imagen), rasio ${ratio}.
 
-Gaya visual WAJIB (sama di semua scene): ${visualStyle.prompt}
+Gaya visual WAJIB (sama di semua scene): ${visualStyle.prompt}${visualStyle.guide ? `\nPanduan gaya ini: ${visualStyle.guide}` : ''}
 ${characterNote ? `Konsistensi karakter/tempat: ${characterNote}` : ''}
 
 Aturan prompt:
@@ -614,7 +696,7 @@ Balas HANYA JSON: {"callouts":[{"i":<nomor scene>,"text":""}]}`, (o) => Array.is
 
 export async function characterBible(s, { title, script, visualStyle }) {
   try {
-    const out = await generateJSON(s, 'scene', `Dari naskah video "${title}" berikut, tulis catatan singkat (maks 70 kata, Bahasa Inggris) tentang tokoh utama, tempat, dan era yang akan muncul berulang, supaya gambar antar scene konsisten. Beri tiap tokoh ciri visual tetap; pihak yang merugikan dalam cerita (mis. tengkulak) jadikan tokoh antagonis dengan ciri jelas (mis. sunglasses and a dark suit). Gaya visual: ${visualStyle.label}.
+    const out = await generateJSON(s, 'scene', `Dari naskah video "${title}" berikut, tulis catatan singkat (maks 70 kata, Bahasa Inggris) tentang tokoh utama, tempat, dan era yang akan muncul berulang, supaya gambar antar scene konsisten. Beri tiap tokoh ciri visual tetap; pihak yang merugikan dalam cerita (mis. perantara yang mengambil untung, pesaing) jadikan tokoh antagonis dengan ciri jelas (mis. sunglasses and a dark suit). Gaya visual: ${visualStyle.label}.
 Naskah:
 ${script.slice(0, 6000)}
 
