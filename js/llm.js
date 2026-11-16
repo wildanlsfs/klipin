@@ -8,6 +8,7 @@ import { decodeFile } from './audio.js';
 import { VISUAL_STYLES, THUMB_TYPES, THUMB_TONE } from './data.js';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const GEMINI_TIMEOUT_MS = 5 * 60 * 1000; // satu panggilan Gemini yang tidak menjawab 5 menit dianggap macet
 const ELEVEN_BASE = 'https://api.elevenlabs.io/v1';
 
 export const PRESETS = {
@@ -259,12 +260,22 @@ async function withFallback(s, task, fn) {
   throw lastErr;
 }
 
-async function request(url, opts, label) {
+// timeoutMs > 0: batalkan kalau server tidak menjawab (supaya panel tidak menunggu selamanya dan fallback bisa jalan).
+async function request(url, opts, label, timeoutMs = 0) {
   let res;
+  const ctl = timeoutMs ? new AbortController() : null;
+  const timer = ctl && setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    res = await fetch(url, opts);
+    res = await fetch(url, ctl ? { ...opts, signal: ctl.signal } : opts);
   } catch {
-    throw new Error(`Tidak bisa terhubung ke ${label} (cek Base URL / koneksi / izin akses).`);
+    const timedOut = !!ctl?.signal.aborted;
+    const err = new Error(timedOut
+      ? `${label} tidak menjawab dalam ${Math.round(timeoutMs / 60000 * 10) / 10} menit.`
+      : `Tidak bisa terhubung ke ${label} (cek Base URL / koneksi / izin akses).`);
+    err.timeout = timedOut;
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
   if (res.ok) return res;
   const j = await res.json().catch(() => ({}));
@@ -295,16 +306,16 @@ function friendlyQuota(e, model) {
     : `Gemini: batas permintaan tercapai untuk ${model}. Tunggu sebentar lalu coba lagi.`);
 }
 
-async function geminiCall(s, body, model) {
+async function geminiCall(s, body, model, timeoutMs = GEMINI_TIMEOUT_MS) {
   const res = await request(`${GEMINI_BASE}/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.gemini.key },
     body: JSON.stringify(body),
-  }, 'Gemini');
+  }, 'Gemini', timeoutMs);
   return res.json();
 }
 
-async function geminiGenerate(s, body, model = s.gemini.model) {
+async function geminiGenerate(s, body, model = s.gemini.model, timeoutMs) {
   if (!s.gemini.key) throw new Error('Gemini API key belum diisi.');
   const textModel = model === s.gemini.model;
   const fallback = textModel ? [model.replace(/-pro\b/, '-flash'), ...FREE_FALLBACK] : model === s.gemini.ttsModel ? TTS_FALLBACK : [];
@@ -312,13 +323,13 @@ async function geminiGenerate(s, body, model = s.gemini.model) {
   let first;
   for (const m of chain.length ? chain : [model]) {
     try {
-      const j = await geminiCall(s, body, m);
-      if (m !== model && first) notify(isGoneErr(first) ? `Model Gemini ${model} tidak tersedia untuk akunmu → memakai ${m}` : `Kuota Gemini ${model} habis → memakai ${m}`);
+      const j = await geminiCall(s, body, m, timeoutMs);
+      if (m !== model && first) notify(first.timeout ? `Gemini ${model} tidak menjawab → memakai ${m}` : isGoneErr(first) ? `Model Gemini ${model} tidak tersedia untuk akunmu → memakai ${m}` : `Kuota Gemini ${model} habis → memakai ${m}`);
       return j;
     } catch (e) {
       first ||= e;
       // kuota habis atau model tidak tersedia → coba model berikutnya; error lain langsung dilaporkan
-      if (!isQuotaErr(e) && !isGoneErr(e)) throw e;
+      if (!isQuotaErr(e) && !isGoneErr(e) && !e.timeout) throw e;
       if (isGoneErr(e) || /limit: 0|per day/i.test(e.message)) blockedModels.add(m); // bukan batas per menit
     }
   }
@@ -858,36 +869,52 @@ const toSec = (v) => {
   return parts.reduce((acc, x) => acc * 60 + x, 0);
 };
 
-async function transcribeGemini(s, chunks, lang) {
-  const segments = [];
-  for (const { base64, offset, duration } of chunks) {
-    const j = await geminiGenerate(s, {
-      contents: [{
-        role: 'user',
-        parts: [
-          { inlineData: { mimeType: 'audio/wav', data: base64 } },
-          { text: `Transkripsikan audio narasi ini (${lang === 'en' ? 'English' : 'Bahasa Indonesia'}) per kalimat dengan timestamp dalam DETIK (angka desimal, relatif dari awal audio ini, durasi audio ${duration.toFixed(1)} detik).
+const TRANSCRIBE_CHUNK_TIMEOUT_MS = 90 * 1000; // satu potongan ±90 detik normalnya selesai <30 detik
+const TRANSCRIBE_PARALLEL = 3;
+
+async function transcribeGemini(s, chunks, lang, onProgress) {
+  const results = new Array(chunks.length);
+  let done = 0, next = 0;
+  const prompt = (duration) => `Transkripsikan audio narasi ini (${lang === 'en' ? 'English' : 'Bahasa Indonesia'}) per kalimat dengan timestamp dalam DETIK (angka desimal, relatif dari awal audio ini, durasi audio ${duration.toFixed(1)} detik).
 Tulis waktu sebagai angka detik (contoh 65.2, BUKAN "1:05"). Jangan lewatkan kalimat apa pun.
-Balas HANYA JSON: {"segments":[{"start":0.0,"end":2.4,"text":"..."}]}` },
-        ],
-      }],
+Balas HANYA JSON: {"segments":[{"start":0.0,"end":2.4,"text":"..."}]}`;
+  const one = async (ch) => {
+    const j = await geminiGenerate(s, {
+      contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data: ch.base64 } }, { text: prompt(ch.duration) }] }],
       generationConfig: { responseMimeType: 'application/json' },
-    });
+    }, undefined, TRANSCRIBE_CHUNK_TIMEOUT_MS);
     const out = parseJSON(j.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '');
+    const segs = [];
     for (const seg of Array.isArray(out) ? out : out.segments || []) {
       // waktu yang tidak terbaca tetap disimpan teksnya; nanti diselaraskan ke jeda audio
       const st = toSec(seg.start), en = toSec(seg.end);
-      const start = Math.max(0, Math.min(duration, Number.isFinite(st) ? st : 0)) + offset;
-      const end = Math.max(start, Math.min(duration, Number.isFinite(en) ? en : 0) + offset);
-      if (seg.text) segments.push({ start, end, text: String(seg.text).trim() });
+      const start = Math.max(0, Math.min(ch.duration, Number.isFinite(st) ? st : 0)) + ch.offset;
+      const end = Math.max(start, Math.min(ch.duration, Number.isFinite(en) ? en : 0) + ch.offset);
+      if (seg.text) segs.push({ start, end, text: String(seg.text).trim() });
     }
-  }
-  return segments;
+    return segs;
+  };
+  const worker = async () => {
+    while (next < chunks.length) {
+      const k = next++;
+      try {
+        results[k] = await one(chunks[k]);
+      } catch (e) {
+        if (isQuotaErr(e)) throw e;
+        results[k] = await one(chunks[k]); // satu kali ulang untuk potongan ini saja
+      }
+      onProgress?.(++done, chunks.length);
+    }
+  };
+  onProgress?.(0, chunks.length);
+  await Promise.all(Array.from({ length: Math.min(TRANSCRIBE_PARALLEL, chunks.length) }, worker));
+  return results.flat(); // urutan potongan dipertahankan
 }
 
-async function transcribeWhisper(c, chunks, lang) {
+async function transcribeWhisper(c, chunks, lang, onProgress) {
   const segments = [];
-  for (const { blob, offset } of chunks) {
+  onProgress?.(0, chunks.length);
+  for (const [k, { blob, offset }] of chunks.entries()) {
     const fd = new FormData();
     fd.append('file', blob, 'audio.wav');
     fd.append('model', c.sttModel);
@@ -903,14 +930,15 @@ async function transcribeWhisper(c, chunks, lang) {
       const text = String(seg.text || '').trim();
       if (text && seg.end > seg.start) segments.push({ start: seg.start + offset, end: seg.end + offset, text });
     }
+    onProgress?.(k + 1, chunks.length);
   }
   return segments;
 }
 
 /** chunks: [{ blob, base64, offset, duration }] dari audio.wavChunksForTranscription */
-export async function transcribe(s, { chunks, lang }) {
+export async function transcribe(s, { chunks, lang, onProgress }) {
   const segs = await withFallback(s, 'transcribe', async (p) => {
-    const out = p.type === 'gemini' ? await transcribeGemini(s, chunks, lang) : await transcribeWhisper(p.cfg, chunks, lang);
+    const out = p.type === 'gemini' ? await transcribeGemini(s, chunks, lang, onProgress) : await transcribeWhisper(p.cfg, chunks, lang, onProgress);
     if (!out.length) throw new Error('Transkrip kosong.');
     return out;
   });

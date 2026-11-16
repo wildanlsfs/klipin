@@ -186,19 +186,34 @@ async function blobToBase64(blob) {
   return btoa(bin);
 }
 
-// Potongan WAV 16 kHz (maks ~4 menit per potong) untuk dikirim ke transkrip AI.
-export async function wavChunksForTranscription(audio, chunkSec = 240) {
+// Potongan WAV 16 kHz (±90 detik per potong) untuk dikirim ke transkrip AI. Batas potongan digeser ke titik paling
+// sunyi (±6 detik dari target) supaya tidak memotong kata. Potongan pendek = tiap panggilan cepat, bisa paralel, dan
+// kalau satu macet hanya potongan itu yang diulang.
+export async function wavChunksForTranscription(audio, chunkSec = 90) {
   const a16 = await resample(audio, 16000);
-  const per = chunkSec * 16000;
+  const n = a16.samples.length;
+  const rate = 16000, frame = 800, win = 6 * rate; // frame 50 ms
+  const cuts = [0];
+  while (n - cuts[cuts.length - 1] > (chunkSec + 10) * rate) {
+    const target = cuts[cuts.length - 1] + chunkSec * rate;
+    let best = target, bestE = Infinity;
+    for (let c = target - win; c <= target + win; c += frame) {
+      let e = 0;
+      for (let k = c; k < c + frame; k++) e += Math.abs(a16.samples[k]);
+      if (e < bestE) { bestE = e; best = c + (frame >> 1); }
+    }
+    cuts.push(best);
+  }
+  cuts.push(n);
   const chunks = [];
-  for (let s = 0; s < a16.samples.length; s += per) {
-    const part = a16.samples.subarray(s, Math.min(a16.samples.length, s + per));
-    const blob = encodeWav({ samples: part, sampleRate: 16000 });
+  for (let k = 0; k < cuts.length - 1; k++) {
+    const part = a16.samples.subarray(cuts[k], cuts[k + 1]);
+    const blob = encodeWav({ samples: part, sampleRate: rate });
     chunks.push({
       blob,
       base64: await blobToBase64(blob),
-      offset: s / 16000,
-      duration: part.length / 16000,
+      offset: cuts[k] / rate,
+      duration: part.length / rate,
     });
   }
   return chunks;

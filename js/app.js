@@ -525,7 +525,13 @@ async function scenesFromTranscriptNow(btn) {
   if (!audioRaw) throw new Error('Upload audio dulu (langkah 2).');
   if (!audioTrim) doTrim();
   const a = currentAudio();
-  const segs = await llm.transcribe(settings, { chunks: await audioLib.wavChunksForTranscription(a), lang: S.lang });
+  btn.textContent = '⏳ Menyiapkan audio untuk transkrip…';
+  const chunks = await audioLib.wavChunksForTranscription(a);
+  setProgress('#sceneProgress', 0);
+  const segs = await llm.transcribe(settings, {
+    chunks, lang: S.lang,
+    onProgress: (i, n) => { btn.textContent = `⏳ Mentranskrip audio ${i}/${n}…`; setProgress('#sceneProgress', i / n); },
+  });
   if (!segs.length) throw new Error('Transkrip kosong.');
   S.scenes = scenesFromTranscript(segs, audioLib.duration(a), S.sceneSec, audioPauses());
   S.syncV = SYNC_V;
