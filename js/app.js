@@ -1792,13 +1792,21 @@ agentTools.youtube_attach = async ({ file, kind = 'video' }) => {
   const path = file || (kind === 'image' ? S.lastThumb : S.lastVideo);
   if (!path) throw new Error(kind === 'image' ? 'Belum ada thumbnail — panggil klipin_thumbnail dulu.' : 'Belum ada video — panggil klipin_render dulu.');
   const tabs = await chrome.tabs.query({ url: 'https://studio.youtube.com/*' });
-  const tab = tabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
-  if (!tab) throw new Error('Tab YouTube Studio tidak ditemukan. Buka studio.youtube.com dulu.');
-  const r = await chrome.runtime.sendMessage({ type: 'TUYUL_SET_FILE', tabId: tab.id, files: [path], kind });
-  // tanpa balasan = background (service worker) masih versi lama: halaman panel sudah memuat kode baru dari disk, background belum
-  if (!r) throw new Error('Background Klipin masih versi lama — klik ↻ pada Klipin di chrome://extensions, lalu buka ulang panel Klipin.');
-  if (!r.ok) throw new Error(r.error || 'Gagal memasukkan file.');
-  return { text: `File dimasukkan ke YouTube Studio: ${path}` };
+  if (!tabs.length) throw new Error('Tab YouTube Studio tidak ditemukan. Buka studio.youtube.com dulu.');
+  // Bisa ada beberapa tab Studio (mis. yang dibuka pengguna sendiri). Jangan asal ambil yang terakhir diakses:
+  // utamakan tab yang menandakan dialog upload terbuka (?d=ud) atau halaman edit video (untuk thumbnail),
+  // lalu coba tab lain satu per satu sampai ada yang punya kotak file.
+  const hint = (t) => (kind === 'image' ? /\/video\/[^/]+\/edit/.test(t.url || '') : /[?&]d=ud\b/.test(t.url || '')) ? 1 : 0;
+  tabs.sort((a, b) => hint(b) - hint(a) || (b.lastAccessed || 0) - (a.lastAccessed || 0));
+  let lastErr = '';
+  for (const tab of tabs) {
+    const r = await chrome.runtime.sendMessage({ type: 'TUYUL_SET_FILE', tabId: tab.id, files: [path], kind });
+    // tanpa balasan = background (service worker) masih versi lama: halaman panel sudah memuat kode baru dari disk, background belum
+    if (!r) throw new Error('Background Klipin masih versi lama — klik ↻ pada Klipin di chrome://extensions, lalu buka ulang panel Klipin.');
+    if (r.ok) return { text: `File dimasukkan ke YouTube Studio: ${path}` };
+    lastErr = r.error || 'Gagal memasukkan file.';
+  }
+  throw new Error(`${lastErr} [dicoba ${tabs.length} tab Studio: ${tabs.map((t) => (t.url || '').replace(/^https:\/\/studio\.youtube\.com/, '').slice(0, 60)).join(' | ')}]`);
 };
 
 // ---- status koneksi agent di panel
