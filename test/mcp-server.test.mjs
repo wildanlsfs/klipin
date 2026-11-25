@@ -4,7 +4,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveAudioPath, expandHome, makeServer, TOOLS, jobs, runTool } from '../mcp/server.mjs';
+import { resolveAudioPath, expandHome, makeServer, TOOLS, jobs, runTool, coerceArgs, rpc, mcpToken } from '../mcp/server.mjs';
 
 test('expandHome only expands ~ or ~/ paths', () => {
   assert.equal(expandHome('~/Downloads'), path.join(os.homedir(), 'Downloads'));
@@ -93,5 +93,47 @@ test('HTTP bridge enforces Host and Extension Origin checks, streams /audio/<tok
   } finally {
     srv.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('coerceArgs memperbaiki tipe yang salah dari model kecil', () => {
+  assert.deepEqual(coerceArgs('klipin_edit_scene', { scene: '3' }).scene, 3);
+  assert.deepEqual(coerceArgs('klipin_images', { scenes: '[1,2]' }).scenes, [1, 2]);
+  assert.deepEqual(coerceArgs('klipin_images', { scenes: '1, 2' }).scenes, [1, 2]);
+  assert.equal('idea' in coerceArgs('klipin_new_project', { idea: null }), false);
+});
+
+test('skema tool kompatibel luas: tanpa required kosong', () => {
+  for (const t of TOOLS) {
+    assert.equal(t.inputSchema.type, 'object');
+    assert.ok(!('required' in t.inputSchema) || t.inputSchema.required.length > 0, t.name);
+  }
+});
+
+test('rpc: initialize, tools/list, notifikasi, method tak dikenal', async () => {
+  const init = await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2099-01-01' } });
+  assert.equal(init.result.serverInfo.name, 'klipin');
+  assert.equal((await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' })).result.tools.length, TOOLS.length);
+  assert.equal(await rpc({ jsonrpc: '2.0', method: 'notifications/initialized' }), undefined);
+  assert.equal((await rpc({ jsonrpc: '2.0', id: 3, method: 'zzz' })).error.code, -32601);
+});
+
+test('endpoint HTTP /mcp: wajib bearer token, menolak Origin browser', async () => {
+  const secret = 'rahasia-tes';
+  const srv = makeServer(secret, 0);
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const port = srv.address().port;
+  const post = (headers, body) => fetch(`http://127.0.0.1:${port}/mcp`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
+  try {
+    const msg = { jsonrpc: '2.0', id: 1, method: 'tools/list' };
+    assert.equal((await post({}, msg)).status, 401);
+    assert.equal((await post({ authorization: 'Bearer salah' }, msg)).status, 401);
+    assert.equal((await post({ authorization: `Bearer ${mcpToken(secret)}`, origin: 'https://evil.example' }, msg)).status, 403);
+    const ok = await post({ authorization: `Bearer ${mcpToken(secret)}` }, msg);
+    assert.equal(ok.status, 200);
+    assert.equal((await ok.json()).result.tools.length, TOOLS.length);
+    assert.equal((await post({ authorization: `Bearer ${mcpToken(secret)}` }, { jsonrpc: '2.0', method: 'notifications/initialized' })).status, 202);
+  } finally {
+    srv.close();
   }
 });

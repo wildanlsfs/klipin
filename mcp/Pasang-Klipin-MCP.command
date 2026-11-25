@@ -1,5 +1,5 @@
 #!/bin/bash
-# Klik dua kali file ini (Mac) untuk memasang Klipin ke AI agent (Claude Desktop, Claude Code, Cursor).
+# Klik dua kali file ini (Mac) untuk memasang Klipin ke AI agent (Claude, Gemini CLI, Codex, Cursor, …).
 cd "$(dirname "$0")"
 export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:$HOME/.volta/bin:$HOME/.nvm/versions/node/$(ls "$HOME/.nvm/versions/node" 2>/dev/null | tail -1)/bin"
 if ! command -v node >/dev/null 2>&1; then

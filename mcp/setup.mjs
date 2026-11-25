@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Pemasang Klipin MCP: mendaftarkan server Klipin ke AI agent yang terpasang di komputer ini
-// (Claude Desktop, Claude Code, Cursor, Windsurf). Jalankan:  node setup.mjs     (hapus: node setup.mjs --hapus)
+// (Claude, Gemini CLI, Codex, Cursor, Windsurf, VS Code, …). Jalankan:  node setup.mjs     (hapus: node setup.mjs --hapus)
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -27,6 +27,7 @@ const JSON_CLIENTS = [
   },
   { name: 'Cursor', file: path.join(home, '.cursor', 'mcp.json') },
   { name: 'Windsurf', file: path.join(home, '.codeium', 'windsurf', 'mcp_config.json') },
+  { name: 'Gemini CLI', file: path.join(home, '.gemini', 'settings.json') },
 ];
 
 function updateJson({ name, file }) {
@@ -67,23 +68,39 @@ function claudeCode() {
   }
 }
 
+function codex() {
+  const run = (args) => execFileSync('codex', args, { stdio: 'pipe', shell: process.platform === 'win32' });
+  try { run(['--version']); } catch { return null; }
+  try { run(['mcp', 'remove', 'klipin']); } catch {}
+  if (remove) return '✅ Codex CLI: Klipin dihapus';
+  try {
+    run(['mcp', 'add', 'klipin', '--', NODE, SERVER]);
+    return '✅ Codex CLI: Klipin terpasang';
+  } catch (e) {
+    return `⚠️  Codex CLI: gagal (${String(e.stderr || e.message).trim().split('\n')[0]})`;
+  }
+}
+
 say('');
 say(remove ? '🎬 Menghapus Klipin dari AI agent…' : '🎬 Memasang Klipin ke AI agent di komputer ini…');
 say('');
-const results = [...JSON_CLIENTS.map(updateJson), claudeCode()].filter(Boolean);
+const results = [...JSON_CLIENTS.map(updateJson), claudeCode(), codex()].filter(Boolean);
 
 if (!results.length) {
   say('Tidak ada aplikasi AI agent yang ditemukan (Claude Desktop, Claude Code, Cursor, Windsurf).');
-  say('Pasang salah satunya dulu, misalnya Claude Desktop: https://claude.ai/download');
-  say('Untuk aplikasi lain, tambahkan server MCP ini secara manual:');
+  say('Untuk aplikasi/model apa pun yang mendukung MCP, tambahkan server ini secara manual (stdio):');
   say(JSON.stringify({ mcpServers: { klipin: entry } }, null, 2));
+  say('');
+  say('Klien yang hanya bisa HTTP (ChatGPT, Gemini API, LM Studio, n8n, …): jalankan');
+  say(`  node "${SERVER}" --http     lalu pakai http://127.0.0.1:47816/mcp`);
+  say(`  dengan header  Authorization: Bearer $(node "${SERVER}" --token)`);
   process.exitCode = 1;
 } else {
   results.forEach((r) => say(r));
   say('');
   if (!remove) {
     say('Langkah terakhir:');
-    say('  1. Tutup lalu buka lagi aplikasi AI agent-mu (Claude Desktop / Cursor) supaya Klipin terbaca.');
+    say('  1. Tutup lalu buka lagi aplikasi AI agent-mu (Claude, Gemini CLI, Codex, Cursor, …) supaya Klipin terbaca.');
     say('  2. Buka Chrome, klik ikon Klipin, isi API key di ⚙︎ kalau belum.');
     say('  3. Minta agent-mu: "Pakai Klipin, buatkan video 3 menit tentang …"');
   }

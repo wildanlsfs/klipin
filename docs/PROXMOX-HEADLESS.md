@@ -180,7 +180,7 @@ Chrome resmi versi baru (137+) tidak lagi mengizinkan `--load-extension`, jadi p
 1. Dari Mac, kirim ZIP rilis ke VM, atau download langsung di VM:
    ```bash
    sudo -u klipin bash -c 'mkdir -p ~/klipin && cd ~/klipin && \
-     curl -L -o klipin.zip https://github.com/wildanlsfs/klipin/releases/latest/download/klipin-1.11.0.zip && unzip -o klipin.zip'
+     curl -L -o klipin.zip https://github.com/wildanlsfs/klipin/releases/latest/download/klipin-1.11.1.zip && unzip -o klipin.zip'
    ```
    Ganti nomor versi dengan yang terbaru di [Releases](https://github.com/wildanlsfs/klipin/releases/latest). Hasilnya ada di `~/klipin/klipin/`. Jalur ini yang dipasang di Chrome, jangan dihapus atau dipindah.
 2. Sambung VNC. Di Chrome buka `chrome://extensions`, nyalakan **Developer mode**, klik **Load unpacked**, pilih `/home/klipin/klipin/klipin`.

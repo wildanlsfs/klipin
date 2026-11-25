@@ -14,7 +14,7 @@ Klik gambar di atas untuk menonton / download video tutorial (MP4, 84 detik): pa
    ke tempat tetap, mis. `Documents/Klipin`. Jangan dihapus atau dipindah setelah dipasang.
 2. Buka `chrome://extensions` → aktifkan **Developer mode** (kanan atas) → **Load unpacked** → pilih folder yang
    **langsung berisi `manifest.json`**.
-   - Windows sering membuat folder ganda saat ekstrak (mis. `klipin-1.11.0\klipin\manifest.json`); pilih folder yang di dalam.
+   - Windows sering membuat folder ganda saat ekstrak (mis. `klipin-1.11.1\klipin\manifest.json`); pilih folder yang di dalam.
 3. Klik ikon Klipin → side panel terbuka. Isi minimal satu API key di ⚙︎
    (Gemini gratis: https://aistudio.google.com/apikey). Model bawaan Gemini: `gemini-3.8-flash`.
 4. **Update:** saat ada versi baru, bilah hijau muncul di panel. Klik **Download update**, timpa folder lama dengan isi ZIP
@@ -59,19 +59,39 @@ Panel punya 5 langkah di bagian atas (**Brief → Naskah → Storyboard → Rend
 **📋 Antrean Batch**
 - Klik ikon 📋 di kanan atas, tempel daftar topik (satu baris satu video), pilih preset dan sumber suara, **＋ Tambah ke Antrean**, lalu **▶ Jalankan Antrean**. Setiap video disimpan di `Downloads/Klipin/<judul>/`.
 
-## 🤖 Pakai lewat AI agent (Claude, Cursor, …)
-Klipin bisa dikendalikan AI agent lewat MCP. Kamu cukup bilang:
+## 🤖 Pakai lewat AI agent (Claude, Gemini, Codex, Cursor, LM Studio, …)
+Klipin bisa dikendalikan model AI apa pun yang mendukung [MCP](https://modelcontextprotocol.io), tidak hanya Claude. Kamu cukup bilang:
 *"Pakai Klipin, buatkan Shorts tentang kenapa petani cabai sering rugi padahal harga pasar melonjak"*, lalu agent menjalankan `klipin_run_pipeline` secara penuh (arahan kreatif otomatis → judul → naskah → suara → storyboard → gambar Flow → render MP4 → paket publish & thumbnail) sampai file siap di `Downloads/Klipin/<judul>/`. Agent juga tetap bisa memanggil tool granular satu per satu (termasuk `klipin_aistudio_voice` untuk suara gratis via tab AI Studio).
 
 **Pasang (sekali saja):**
 - **Claude Desktop** (paling mudah, tidak perlu install apa-apa lagi):
   1. Download **`klipin.mcpb`** dari halaman [Releases](https://github.com/wildanlsfs/klipin/releases/latest).
   2. Klik dua kali file itu → Claude Desktop terbuka → klik **Install**.
-- **Claude Code, Cursor, Windsurf**: butuh [Node.js](https://nodejs.org/id/download) (versi LTS). Buka folder `mcp` di folder Klipin,
+- **Claude Code, Gemini CLI, Codex CLI, Cursor, Windsurf**: butuh [Node.js](https://nodejs.org/id/download) (versi LTS). Buka folder `mcp` di folder Klipin,
   lalu klik dua kali **`Pasang-Klipin-MCP.command`** (Mac) atau **`Pasang-Klipin-MCP.bat`** (Windows). Skrip ini mendaftarkan
   Klipin ke semua aplikasi yang ditemukan. Tutup lalu buka lagi aplikasinya.
   - Mac menolak membuka file? Klik kanan → **Open** → **Open**.
   - Cara manual (aplikasi lain): `node /path/ke/klipin/mcp/server.mjs` sebagai server MCP stdio.
+- **Model/aplikasi lain** (Gemini CLI, Codex, LM Studio, Open WebUI, n8n, agent buatan sendiri): lihat tabel di bawah.
+
+**Cara konek manual per aplikasi** (ganti `/path/ke/klipin` dengan folder tempat kamu mengekstrak Klipin; butuh Node.js 18+):
+
+| Aplikasi | Cara |
+| --- | --- |
+| Claude Desktop | Klik dua kali `klipin.mcpb` (atau lewat pemasang di atas) |
+| Claude Code | `claude mcp add --scope user klipin -- node /path/ke/klipin/mcp/server.mjs` |
+| Codex CLI | `codex mcp add klipin -- node /path/ke/klipin/mcp/server.mjs` |
+| Gemini CLI | Tambahkan ke `~/.gemini/settings.json`: `{"mcpServers":{"klipin":{"command":"node","args":["/path/ke/klipin/mcp/server.mjs"]}}}` |
+| Cursor / Windsurf / VS Code | Tambahkan blok `mcpServers` yang sama ke `~/.cursor/mcp.json` / `~/.codeium/windsurf/mcp_config.json` / pengaturan MCP VS Code |
+| LM Studio, Open WebUI, n8n, agent buatan sendiri | Pakai mode HTTP di bawah (atau stdio kalau didukung) |
+
+**Mode HTTP (klien lokal yang tidak bisa stdio):**
+1. Jalankan `node /path/ke/klipin/mcp/server.mjs --http` dan biarkan terbuka.
+2. Arahkan klien ke `http://127.0.0.1:47816/mcp` dengan header `Authorization: Bearer <token>`. Token didapat dari `node /path/ke/klipin/mcp/server.mjs --token`.
+3. Server hanya mendengarkan di `127.0.0.1` dan menolak permintaan tanpa token atau dari halaman web.
+- ChatGPT dan layanan berbasis cloud lain tidak bisa menjangkau `127.0.0.1`. Untuk itu butuh terowongan publik (mis. cloudflared atau ngrok); lakukan hanya kalau paham risikonya, karena token menjadi satu-satunya penjaga.
+- Model kecil yang salah menulis tipe argumen (angka sebagai teks, daftar sebagai string) tetap diterima karena server memperbaikinya otomatis.
+- Klien selain Claude belum diuji langsung; kalau ada yang gagal, laporkan lewat *Issues*.
 
 **Pakai:**
 1. Buka Chrome, klik ikon Klipin. Tombol 🤖 di panel memberi titik hijau saat agent terhubung (progres live tampil di bilah Autopilot sticky di panel).

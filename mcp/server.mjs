@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Klipin MCP server — menghubungkan AI agent (Claude Desktop, Claude Code, Cursor, …) dengan
+// Klipin MCP server — menghubungkan AI agent apa pun (Claude, ChatGPT/Codex, Gemini, Cursor, LM Studio, …) dengan
 // extension Klipin di Chrome. Tanpa dependensi: cukup Node.js 18+.
 //
-//   AI agent ──stdio (MCP)──▶ server ini ──http://127.0.0.1:47816──▶ panel Klipin di Chrome
+//   AI agent ──stdio atau HTTP /mcp──▶ server ini ──http://127.0.0.1:47816──▶ panel Klipin di Chrome
 //
 // Panel Klipin mengambil tugas lewat long-poll dan mengirim hasilnya kembali. Endpoint panel hanya
 // menerima permintaan dari extension (header khusus + Origin extension + Host localhost), jadi situs
@@ -17,7 +17,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const PORT = Number(process.env.KLIPIN_PORT) || 47816;
-const VERSION = '1.11.0';
+const VERSION = '1.11.1';
 const CALL_WAIT_MS = Number(process.env.KLIPIN_CALL_WAIT_MS) || 50000; // batas tunggu satu panggilan tool (agent punya timeout sendiri)
 const PANEL_ALIVE_MS = 8000;
 
@@ -38,7 +38,7 @@ function secret() {
 
 const str = (description, extra = {}) => ({ type: 'string', description, ...extra });
 const num = (description, extra = {}) => ({ type: 'number', description, ...extra });
-const obj = (properties = {}, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
+const obj = (properties = {}, required = []) => ({ type: 'object', properties, ...(required.length ? { required } : {}), additionalProperties: false });
 
 export const TOOLS = [
   {
@@ -384,6 +384,8 @@ function allowedExtOrigin(origin) {
   return /^chrome-extension:\/\/[a-p]{32}$/.test(origin) ? origin : '';
 }
 
+export const mcpToken = (sharedSecret) => crypto.createHmac('sha256', String(sharedSecret)).update('klipin-mcp-http').digest('hex').slice(0, 40);
+
 export function makeServer(sharedSecret, port = PORT) {
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://127.0.0.1:${port}`);
@@ -414,6 +416,24 @@ export function makeServer(sharedSecret, port = PORT) {
       } catch (e) {
         return send(res, 400, { error: e.message });
       }
+    }
+
+    // MCP lewat HTTP (Streamable HTTP) untuk klien non-stdio: ChatGPT/OpenAI Agents, Gemini, LM Studio, n8n, dll.
+    // Wajib header Authorization: Bearer <token> (lihat `node server.mjs --token`) dan tanpa Origin browser.
+    if (url.pathname === '/mcp') {
+      if (origin) return send(res, 403, { error: 'origin' });
+      const auth = String(req.headers.authorization || '');
+      const want = `Bearer ${mcpToken(sharedSecret)}`;
+      const a = Buffer.from(auth); const b = Buffer.from(want);
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return send(res, 401, { error: 'butuh Authorization: Bearer <token>' });
+      if (req.method === 'DELETE') { res.writeHead(200); return res.end(); }
+      if (req.method !== 'POST') { res.writeHead(405, { Allow: 'POST, DELETE' }); return res.end(); }
+      let body;
+      try { body = await readBody(req, 20 * 1024 * 1024); } catch (e) { return send(res, 400, { error: e.message }); }
+      const msgs = Array.isArray(body) ? body : [body];
+      const replies = (await Promise.all(msgs.map((m) => rpc(m)))).filter(Boolean);
+      if (!replies.length) { res.writeHead(202); return res.end(); }
+      return send(res, 200, Array.isArray(body) ? replies : replies[0]);
     }
 
     // endpoint status untuk background service worker (boleh tanpa Origin)
@@ -520,42 +540,76 @@ async function callTool(name, args) {
 const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const write = (msg) => process.stdout.write(`${JSON.stringify(msg)}\n`);
 
-async function handle(msg) {
-  const { id, method, params } = msg;
-  const reply = (result) => id !== undefined && write({ jsonrpc: '2.0', id, result });
-  const fail = (code, message) => id !== undefined && write({ jsonrpc: '2.0', id, error: { code, message } });
+// Pelonggar argumen: model kecil sering mengirim angka/boolean/array sebagai string.
+export function coerceArgs(name, args) {
+  const props = TOOLS.find((t) => t.name === name)?.inputSchema?.properties;
+  if (!props || !args || typeof args !== 'object') return args || {};
+  const out = { ...args };
+  for (const [k, sch] of Object.entries(props)) {
+    let v = out[k];
+    if (v === undefined || v === null) { delete out[k]; continue; }
+    if (sch.type === 'number' && typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) v = Number(v);
+    else if (sch.type === 'boolean' && typeof v === 'string' && /^(true|false)$/i.test(v.trim())) v = v.trim().toLowerCase() === 'true';
+    else if (sch.type === 'string' && (typeof v === 'number' || typeof v === 'boolean')) v = String(v);
+    else if (sch.type === 'array' && typeof v === 'string') {
+      try { const j = JSON.parse(v); v = Array.isArray(j) ? j : [j]; } catch { v = v.split(',').map((x) => x.trim()).filter(Boolean); }
+      if (sch.items?.type === 'number') v = v.map((x) => (typeof x === 'string' && x.trim() !== '' && !Number.isNaN(Number(x)) ? Number(x) : x));
+    }
+    out[k] = v;
+  }
+  return out;
+}
+
+// Satu pesan JSON-RPC → balasan (atau undefined untuk notifikasi). Dipakai stdio dan HTTP.
+export async function rpc(msg) {
+  const { id, method, params } = msg || {};
+  const ok = (result) => (id !== undefined ? { jsonrpc: '2.0', id, result } : undefined);
+  const bad = (code, message) => (id !== undefined ? { jsonrpc: '2.0', id, error: { code, message } } : undefined);
   try {
     switch (method) {
       case 'initialize':
-        return reply({
+        return ok({
           protocolVersion: PROTOCOLS.includes(params?.protocolVersion) ? params.protocolVersion : PROTOCOLS[0],
           capabilities: { tools: {} },
           serverInfo: { name: 'klipin', title: 'Klipin', version: VERSION },
           instructions: INSTRUCTIONS,
         });
       case 'ping':
-        return reply({});
+        return ok({});
       case 'tools/list':
-        return reply({ tools: TOOLS });
+        return ok({ tools: TOOLS });
       case 'tools/call':
-        return reply(await callTool(params?.name, params?.arguments || {}));
+        return ok(await callTool(params?.name, coerceArgs(params?.name, params?.arguments || {})));
+      case 'resources/list': return ok({ resources: [] });
+      case 'prompts/list': return ok({ prompts: [] });
       default:
-        if (method?.startsWith('notifications/')) return;
-        return fail(-32601, `Method not found: ${method}`);
+        if (method?.startsWith('notifications/')) return undefined;
+        return bad(-32601, `Method not found: ${method}`);
     }
   } catch (e) {
     log('error', e.stack || e.message);
-    return fail(-32603, e.message);
+    return bad(-32603, e.message);
   }
 }
 
+async function handle(msg) {
+  const r = await rpc(msg);
+  if (r) write(r);
+}
+
 const isEntrypoint = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const HTTP_ONLY = process.argv.includes('--http');
+if (isEntrypoint && process.argv.includes('--token')) {
+  console.log(mcpToken(secret()));
+  process.exit(0);
+}
 if (isEntrypoint) {
   SECRET = secret();
   startJobSweeper();
   let buf = '';
+  if (HTTP_ONLY) process.stdin.pause();
   process.stdin.setEncoding('utf8');
-  process.stdin.on('data', (chunk) => {
+  if (!HTTP_ONLY) process.stdin.on('data', (chunk) => {
     buf += chunk;
     let i;
     while ((i = buf.indexOf('\n')) >= 0) {
@@ -567,8 +621,8 @@ if (isEntrypoint) {
       handle(msg);
     }
   });
-  process.stdin.on('end', () => process.exit(0));
+  if (!HTTP_ONLY) process.stdin.on('end', () => process.exit(0));
 
   // Pegang port sejak awal supaya panel bisa langsung terhubung.
-  starting = becomePrimary(SECRET).then((ok) => { primary = ok; starting = null; if (!ok) log('port sudah dipakai — meneruskan ke server Klipin yang sudah jalan'); });
+  starting = becomePrimary(SECRET).then((ok) => { primary = ok; starting = null; if (!ok) log('port sudah dipakai — meneruskan ke server Klipin yang sudah jalan'); else if (HTTP_ONLY) log(`MCP HTTP: http://127.0.0.1:${PORT}/mcp  (header Authorization: Bearer ${mcpToken(SECRET)})`); });
 }

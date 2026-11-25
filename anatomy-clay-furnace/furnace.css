@@ -1,0 +1,111 @@
+/* Clay Furnace tokens — light-first shipping theme with dark overrides last. */
+.cf {
+  --cf-ember: #ea580c;
+  --cf-air: #2563eb;
+  --cf-soot-paper: #dcd6cf;
+  --cf-soot-top: #d1cbc3;
+  --cf-soot-0: #bab3ab;
+  --cf-soot-1: #c2bbb3;
+  --cf-soot-2: #cac3bb;
+  --cf-soot-3: #d2cbc3;
+  --cf-soot-line-lo: #989087;
+  --cf-soot-line-mid: #7d756d;
+  --cf-soot-line-hi: #58514a;
+  --cf-glow: 0%;
+  --cf-blend: normal;
+  --cf-fb-bed: #d9480f;
+  --cf-fb-flame: #f97316;
+  --cf-fb-core: #fff7e6;
+}
+
+[data-theme="dark"] .cf {
+  --cf-ember: #ff8a3c;
+  --cf-air: #60a5fa;
+  --cf-blend: screen;
+  --cf-fb-bed: #ea580c;
+  --cf-fb-flame: #ff9a3c;
+  --cf-fb-core: #fff2d6;
+}
+
+/* Interior refractory cavity: soot-darkened in light, warmed live toward ember hue. */
+.cf .cf-cavity {
+  --anatomy-paper: color-mix(in srgb, var(--cf-soot-paper), var(--cf-ember) calc(var(--cf-glow) * 0.22));
+  --anatomy-top: color-mix(in srgb, var(--cf-soot-top), var(--cf-ember) calc(var(--cf-glow) * 0.26));
+  --anatomy-shade-0: color-mix(in srgb, var(--cf-soot-0), var(--cf-ember) calc(var(--cf-glow) * 0.2));
+  --anatomy-shade-1: color-mix(in srgb, var(--cf-soot-1), var(--cf-ember) calc(var(--cf-glow) * 0.24));
+  --anatomy-shade-2: color-mix(in srgb, var(--cf-soot-2), var(--cf-ember) calc(var(--cf-glow) * 0.28));
+  --anatomy-shade-3: color-mix(in srgb, var(--cf-soot-3), var(--cf-ember) calc(var(--cf-glow) * 0.32));
+  --anatomy-lo: color-mix(in srgb, var(--cf-soot-line-lo), var(--cf-ember) calc(var(--cf-glow) * 0.42));
+  --anatomy-mid: color-mix(in srgb, var(--cf-soot-line-mid), var(--cf-ember) calc(var(--cf-glow) * 0.48));
+  --anatomy-hi: color-mix(in srgb, var(--cf-soot-line-hi), var(--cf-ember) calc(var(--cf-glow) * 0.52));
+  --anatomy-faint: color-mix(in srgb, var(--cf-soot-0), var(--cf-ember) calc(var(--cf-glow) * 0.35));
+}
+
+[data-theme="dark"] .cf .cf-cavity {
+  --anatomy-paper: color-mix(in srgb, #181716, var(--cf-ember) calc(var(--cf-glow) * 0.22));
+  --anatomy-top: color-mix(in srgb, #23211f, var(--cf-ember) calc(var(--cf-glow) * 0.26));
+  --anatomy-shade-0: color-mix(in srgb, #141312, var(--cf-ember) calc(var(--cf-glow) * 0.16));
+  --anatomy-shade-1: color-mix(in srgb, #191816, var(--cf-ember) calc(var(--cf-glow) * 0.2));
+  --anatomy-shade-2: color-mix(in srgb, #1e1d1b, var(--cf-ember) calc(var(--cf-glow) * 0.24));
+  --anatomy-shade-3: color-mix(in srgb, #242220, var(--cf-ember) calc(var(--cf-glow) * 0.28));
+  --anatomy-lo: inherit;
+  --anatomy-mid: inherit;
+  --anatomy-hi: inherit;
+  --anatomy-faint: inherit;
+}
+
+.cf .iso-plate {
+  overflow: hidden;
+}
+
+.cf-stage {
+  position: relative;
+  border-radius: 8px;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: ew-resize;
+}
+
+.cf-stage:focus-visible {
+  outline: 1px solid var(--anatomy-muted);
+  outline-offset: 6px;
+}
+
+.cf-stage > svg,
+.cf-stage > canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.cf-stage > .cf-layer {
+  position: absolute;
+  inset: 0;
+  height: 100% !important;
+  pointer-events: none;
+}
+
+.cf-gl {
+  mix-blend-mode: var(--cf-blend);
+}
+
+.cf-fallback {
+  opacity: var(--cf-fb-op, 0.88);
+  transition: opacity 0.12s linear;
+}
+
+.cf-stage[data-gl] .cf-fallback {
+  display: none;
+}
+
+[data-theme="light"] .cf .cf-fb-tint {
+  mix-blend-mode: multiply;
+}
+
+@media (max-width: 520px) {
+  .cf .cf-stage {
+    width: 114%;
+    margin-left: -7%;
+  }
+}
