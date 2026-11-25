@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "klipin",
   "display_name": "Klipin",
-  "version": "1.6.0",
-  "description": "Make faceless YouTube videos with the Klipin Chrome extension: title, script, voice, scenes, Google Flow images, MP4 render, YouTube pack & thumbnail.",
-  "long_description": "Connects your AI agent to the Klipin Chrome extension running on this computer. Keep Chrome open with the Klipin panel (click the Klipin icon) — the agent can then write the script, sync scenes to the voice-over, generate images in Google Flow, render the MP4 and prepare titles, description, tags and a thumbnail. Everything runs locally; API keys stay inside the extension.",
+  "version": "1.11.0",
+  "description": "Make faceless YouTube videos & Shorts/Reels with the Klipin Chrome extension: brief, script, AI Studio / TTS voice, storyboard, Google Flow images, MP4 render, publish pack & thumbnail.",
+  "long_description": "Connects your AI agent to the Klipin Chrome extension running on this computer. Keep Chrome open with the Klipin panel (click the Klipin icon) — the agent can run the full pipeline automatically or step-by-step: write the script, generate free voice-over in Google AI Studio or via TTS API, sync scenes, auto-create a Google Flow project and generate images, render MP4, and prepare titles, description, tags and thumbnail.",
   "author": {
     "name": "wildanlsfs",
     "url": "https://github.com/wildanlsfs"
@@ -19,9 +19,12 @@
   "license": "MIT",
   "keywords": [
     "youtube",
+    "shorts",
+    "reels",
     "video",
     "faceless",
     "google flow",
+    "google ai studio",
     "chrome extension"
   ],
   "server": {
@@ -61,7 +64,11 @@
     },
     {
       "name": "klipin_voice",
-      "description": "Generate the voice-over directly via a TTS API (Gemini / OpenAI / ElevenLabs key needed in Klipin settings). Alternative: the user makes it for free in Google AI Studio and you load the file with klip"
+      "description": "Generate the voice-over directly via a TTS API (Gemini / OpenAI / ElevenLabs key needed in Klipin settings). Alternative: call klipin_aistudio_voice for free automation via Google AI Studio, or klipin_load_audio from a file."
+    },
+    {
+      "name": "klipin_aistudio_voice",
+      "description": "Generate the voice-over automatically for free using Google AI Studio (aistudio.google.com/generate-speech) in Chrome. Long-running: may return a job_id — then call klipin_wait."
     },
     {
       "name": "klipin_load_audio",
@@ -77,7 +84,7 @@
     },
     {
       "name": "klipin_images",
-      "description": "Generate scene images in Google Flow (the user must have a Flow project open in Chrome). Long-running: returns a job_id if not finished — then call klipin_wait."
+      "description": "Generate scene images in Google Flow (auto-creates a new Flow project if needed when Chrome is logged in). Long-running: returns a job_id if not finished — then call klipin_wait."
     },
     {
       "name": "klipin_render",
@@ -88,6 +95,10 @@
       "description": "Create the YouTube upload pack: 5 titles, description with auto chapters/timestamps and hashtags, tags, thumbnail text ideas and a thumbnail background prompt."
     },
     {
+      "name": "klipin_thumb_concepts",
+      "description": "Ask the AI for thumbnail concepts that fit the project (story format, narration style, visual style): one concept per thumbnail type with idea, text and Flow image prompt."
+    },
+    {
       "name": "klipin_thumbnail",
       "description": "Compose a YouTube thumbnail sized to the project ratio (16:9 1280x720, 9:16 1080x1920, 1:1 1080x1080), save it as JPG to Downloads/Klipin and return a preview."
     },
@@ -96,8 +107,12 @@
       "description": "Put the last rendered MP4 (kind video) or thumbnail (kind image) into the open file picker of the YouTube Studio upload dialog in Chrome. Upload and scheduling are then finished in Studio."
     },
     {
+      "name": "klipin_run_pipeline",
+      "description": "Run the complete end-to-end Klipin pipeline automatically (title -> script -> voice -> storyboard -> Flow images -> render MP4 -> publish pack & thumbnail) and save everything into Downloads/Klipin/<project>/."
+    },
+    {
       "name": "klipin_wait",
-      "description": "Wait (up to ~50 s) for a long-running job (images, render, voice) and report its progress/result."
+      "description": "Wait (up to ~50 s) for a long-running job (images, render, voice, pipeline) and report its progress/result."
     }
   ],
   "compatibility": {

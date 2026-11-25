@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Klipin",
-  "version": "1.10.3",
+  "version": "1.11.0",
   "description": "Judul → naskah → suara → scene → gambar otomatis di Google Flow → render MP4. Semua dari side panel.",
   "minimum_chrome_version": "116",
   "icons": {
@@ -68,6 +68,15 @@
       ],
       "js": [
         "content/flow.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://aistudio.google.com/*"
+      ],
+      "js": [
+        "content/aistudio.js"
       ],
       "run_at": "document_idle"
     }

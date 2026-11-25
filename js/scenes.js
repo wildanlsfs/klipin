@@ -1,11 +1,16 @@
 // Memecah naskah / transkrip menjadi scene bertimestamp.
 // Scene: { i, text, start, end, prompt, image (dataURL|null), status }
 
+const ABBR_RE = /\b(?:Dr|Prof|Ir|Hj|Mr|Mrs|Ms|St|No|Jl|Rp|dkk|dsb|dll|Yth|S\.H|S\.Pd|S\.Kom|M\.Si|U\.S|U\.K|[A-Z](?:\.[A-Z])*)\./g;
+const DOT_PLACEHOLDER = '\uE000';
+
 export function splitSentences(text) {
-  return text
+  const protectedText = String(text || '')
     .replace(/\s+/g, ' ')
+    .replace(ABBR_RE, (m) => m.replace(/\./g, DOT_PLACEHOLDER));
+  return protectedText
     .split(/(?<=[.!?…])\s+(?=[A-Z0-9"“'(À-ɏ])/u)
-    .map((s) => s.trim())
+    .map((s) => s.replaceAll(DOT_PLACEHOLDER, '.').trim())
     .filter(Boolean);
 }
 

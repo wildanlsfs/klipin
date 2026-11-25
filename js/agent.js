@@ -24,6 +24,7 @@ export function startAgentBridge(tools, onState) {
     const progress = (text) => { // dibatasi supaya tidak membanjiri server
       if (Date.now() - lastProg < 800) return;
       lastProg = Date.now();
+      set('working', `${job.tool}|${text}`);
       post('/progress', { id: job.id, text });
     };
     try {
@@ -58,6 +59,7 @@ export function startAgentBridge(tools, onState) {
   }
 
   return {
+    getClientId: () => client,
     setEnabled(on) {
       enabled = on;
       if (on && !running) loop();

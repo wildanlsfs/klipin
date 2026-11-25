@@ -6,9 +6,17 @@ chrome.sidePanel
 // AI agent (Klipin MCP server di localhost): kalau agent mengirim tugas tetapi panel Klipin belum
 // terbuka, buka Klipin di tab (side panel tidak bisa dibuka tanpa klik pengguna).
 const AGENT_URL = 'http://127.0.0.1:47816';
-let lastWake = 0;
+const DETACH_PREFIX = 'klipin-detach-';
+const AUTOMATED_HOST = /^https:\/\/([a-z0-9-]+\.)*(labs\.google|flow\.google|flow\.google\.com|aistudio\.google\.com)(:\d+)?(\/|$)/i;
+
 chrome.alarms.create('klipin-agent', { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name.startsWith(DETACH_PREFIX)) {
+    const tabId = Number(alarm.name.slice(DETACH_PREFIX.length));
+    attached.delete(tabId);
+    if (Number.isFinite(tabId)) chrome.debugger.detach({ tabId }).catch(() => {});
+    return;
+  }
   if (alarm.name !== 'klipin-agent') return;
   const { agentBridge = true } = await chrome.storage.local.get('agentBridge');
   if (!agentBridge) return;
@@ -20,22 +28,23 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (!open.length) {
       const tab = await chrome.tabs.create({ url: `${url}?agent=1`, active: false, pinned: true });
       chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => {}); // jangan ditidurkan hemat memori Chrome
-    } else if (Date.now() - lastWake > 90000) {
-      // Tab Klipin ada tapi tidak terhubung (biasanya ditidurkan Chrome): muat ulang, maks sekali per 90 detik.
-      lastWake = Date.now();
-      await chrome.tabs.reload(open[0].id);
-      chrome.tabs.update(open[0].id, { autoDiscardable: false }).catch(() => {});
+    } else {
+      const { lastWake = 0 } = await chrome.storage.session.get('lastWake').catch(() => ({}));
+      if (Date.now() - lastWake > 90000) {
+        // Tab Klipin ada tapi tidak terhubung (biasanya ditidurkan Chrome): muat ulang, maks sekali per 90 detik.
+        await chrome.storage.session.set({ lastWake: Date.now() }).catch(() => {});
+        await chrome.tabs.reload(open[0].id);
+        chrome.tabs.update(open[0].id, { autoDiscardable: false }).catch(() => {});
+      }
     }
   } catch {
     // server MCP tidak jalan — normal kalau pengguna tidak memakai AI agent
   }
 });
 
-// Klik "asli" untuk Google Flow. Flow mengabaikan klik/Enter buatan script (event.isTrusted = false),
-// jadi tombol kirim diklik lewat Chrome DevTools Protocol. Selama dipakai, Chrome menampilkan bilah
-// "Klipin sedang men-debug browser ini"; debugger dilepas lagi setelah 2 menit tidak dipakai.
+// Klik & ketik "asli" untuk Google Flow / AI Studio. Halaman mengabaikan event buatan script
+// (event.isTrusted = false), jadi tombol/input dikirim lewat Chrome DevTools Protocol.
 const attached = new Set();
-const detachTimers = new Map();
 
 async function ensureAttached(tabId) {
   if (attached.has(tabId)) return;
@@ -48,11 +57,7 @@ async function ensureAttached(tabId) {
 }
 
 function scheduleDetach(tabId) {
-  clearTimeout(detachTimers.get(tabId));
-  detachTimers.set(tabId, setTimeout(() => {
-    attached.delete(tabId);
-    chrome.debugger.detach({ tabId }).catch(() => {});
-  }, 120000));
+  chrome.alarms.create(`${DETACH_PREFIX}${tabId}`, { delayInMinutes: 2 });
 }
 
 chrome.debugger.onDetach.addListener(({ tabId }) => attached.delete(tabId));
@@ -71,9 +76,33 @@ async function trustedClick(tabId, x, y, attempt = 1) {
   scheduleDetach(tabId);
 }
 
-// Isi <input type=file> di tab lain (mis. dialog upload YouTube Studio) dengan file dari komputer ini.
+async function cdpTypeText(tabId, text, clearFirst = false) {
+  await ensureAttached(tabId);
+  const send = (m, p) => chrome.debugger.sendCommand({ tabId }, m, p);
+  if (clearFirst) {
+    // Pilih semua teks di elemen fokus lalu hapus sebelum insertText
+    const mod = (await chrome.runtime.getPlatformInfo().catch(() => ({ os: 'mac' }))).os === 'mac' ? 4 : 2;
+    await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', modifiers: mod, key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, commands: ['selectAll'] });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', modifiers: mod, key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65 });
+    await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 });
+  }
+  if (text) await send('Input.insertText', { text: String(text) });
+  scheduleDetach(tabId);
+}
+
+// Isi <input type=file> di tab YouTube Studio dengan file video/thumbnail hasil Klipin.
 // Lewat CDP karena script biasa tidak boleh memilih file lokal; tidak ada batas ukuran file.
 async function setFileInput(tabId, files, kind) {
+  const tab = await chrome.tabs.get(tabId);
+  if (!/^https:\/\/studio\.youtube\.com\//i.test(tab?.url || '')) {
+    throw new Error('Tab tujuan bukan YouTube Studio.');
+  }
+  const extRe = kind === 'image' ? /\.(jpe?g|png|webp)$/i : /\.(mp4|mov|webm|mkv)$/i;
+  if (!Array.isArray(files) || !files.length || files.some((f) => typeof f !== 'string' || !f || f.includes('\0') || !extRe.test(f))) {
+    throw new Error('Path atau format file tidak valid untuk diunggah.');
+  }
+
   await ensureAttached(tabId);
   const send = (m, p) => chrome.debugger.sendCommand({ tabId }, m, p);
   // cari input file yang terlihat, termasuk di dalam shadow DOM
@@ -101,22 +130,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, error: e.message }));
     return true;
   }
-  if (msg?.type === 'TUYUL_SLEEP' && sender.tab?.id) { // jeda untuk tab Flow yang tersembunyi (lihat content/flow.js)
+  const fromAutoTab = Boolean(sender.tab?.id && AUTOMATED_HOST.test(sender.tab.url || ''));
+  if (!fromAutoTab) return false;
+
+  if (msg?.type === 'TUYUL_SLEEP') { // jeda untuk tab Flow / AI Studio yang tersembunyi
     setTimeout(() => sendResponse({ ok: true }), Math.min(Number(msg.ms) || 0, 30000));
     return true;
   }
-  if (msg?.type === 'TUYUL_DEBUG_ATTACH' && sender.tab?.id) {
-    // Pasang debugger SEBELUM posisi tombol diukur: bilah "sedang men-debug" yang muncul
-    // saat pertama dipasang memperkecil halaman dan menggeser tombol kirim.
+  if (msg?.type === 'TUYUL_DEBUG_ATTACH') {
     const fresh = !attached.has(sender.tab.id);
     ensureAttached(sender.tab.id)
       .then(() => sendResponse({ ok: true, fresh }))
       .catch((e) => sendResponse({ ok: false, error: e.message }));
     return true;
   }
-  if (msg?.type !== 'TUYUL_TRUSTED_CLICK' || !sender.tab?.id) return false;
-  trustedClick(sender.tab.id, msg.x, msg.y, msg.attempt)
-    .then(() => sendResponse({ ok: true }))
-    .catch((e) => sendResponse({ ok: false, error: e.message }));
-  return true;
+  if (msg?.type === 'TUYUL_CDP_TYPE') {
+    cdpTypeText(sender.tab.id, msg.text, !!msg.clear)
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: e.message }));
+    return true;
+  }
+  if (msg?.type === 'TUYUL_TRUSTED_CLICK') {
+    trustedClick(sender.tab.id, msg.x, msg.y, msg.attempt)
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: e.message }));
+    return true;
+  }
+  return false;
 });

@@ -12,10 +12,11 @@
       <span class="logo">🎬</span>
       <div>
         <div class="name">Klipin <button class="ver" id="verBtn" title="Cek update"></button></div>
-        <div class="tag" id="statusLine">Judul → Video jadi</div>
+        <div class="tag" id="statusLine">Brief → Video jadi</div>
       </div>
     </div>
     <div class="top-actions">
+      <button class="icon-btn" id="queueBtn" title="Antrean batch otomatis">📋</button>
       <button class="icon-btn" id="agentBtn" title="AI agent">🤖</button>
       <button class="icon-btn" id="newProjectBtn" title="Proyek baru">＋</button>
       <button class="icon-btn" id="settingsBtn" title="Pengaturan API">⚙︎</button>
@@ -23,22 +24,35 @@
   </header>
 
   <nav class="stepper" id="stepper">
-    <button data-step="1"><b>1</b>Judul</button>
+    <button data-step="1"><b>1</b>Brief</button>
     <button data-step="2"><b>2</b>Naskah</button>
-    <button data-step="3"><b>3</b>Scene</button>
-    <button data-step="4"><b>4</b>Gambar</button>
-    <button data-step="5"><b>5</b>Render</button>
-    <button data-step="6"><b>6</b>YouTube</button>
+    <button data-step="3"><b>3</b>Storyboard</button>
+    <button data-step="4"><b>4</b>Render</button>
+    <button data-step="5"><b>5</b>Publish</button>
   </nav>
 
   <div class="update hidden" id="updateBar"></div>
 
+  <div class="autobar hidden" id="autoBar">
+    <div class="label-row">
+      <b id="autoTitle">⚡ Otomasi berjalan…</b>
+      <span class="meta" id="autoElapsed">0:00</span>
+      <span class="meta" id="autoPct">0%</span>
+      <button class="btn danger fit small" id="autoStopBtn">■ Stop</button>
+    </div>
+    <div class="auto-sub" id="autoSub"></div>
+    <div class="progress" id="autoProgress"><div></div></div>
+    <div class="auto-stages" id="autoStages"></div>
+  </div>
+
   <main>
-    <!-- ============ STEP 1: JUDUL ============ -->
+    <!-- ============ STEP 1: BRIEF & PRESET ============ -->
     <section class="step" data-step="1">
-      <h2>Mau bikin video tentang apa?</h2>
-      <label for="rawTitle">Judul / ide mentah</label>
-      <textarea id="rawTitle" rows="3" placeholder="Contoh: Kenapa kebakaran hutan di Kalimantan susah sekali dipadamkan? Siapa dalang utamanya?"></textarea>
+      <label>Preset cepat</label>
+      <div class="presets" id="presetChips"></div>
+
+      <label for="rawTitle">Ide / topik video</label>
+      <textarea id="rawTitle" rows="3" placeholder="Contoh: Kenapa harga ikan naik 4x lipat dari nelayan ke pasar?"></textarea>
 
       <details class="card" id="ideaBank">
         <summary>📚 100 ide siap pakai</summary>
@@ -46,11 +60,51 @@
         <div class="list" id="ideaList"></div>
       </details>
 
-      <button class="btn primary" id="expandBtn">✨ Kembangkan Judul</button>
+      <button class="btn" id="expandBtn">✨ Kembangkan 5 Opsi Judul</button>
       <div class="options" id="titleOptions"></div>
 
+      <div class="card">
+        <div class="label-row">
+          <h3>🎛️ Arahan Kreatif</h3>
+          <button class="btn fit small" id="autoCreativeBtn" title="Minta AI memilihkan format, gaya narasi, gaya visual, dan suara paling cocok untuk topik ini">✨ Pilihkan AI</button>
+        </div>
+        <p class="hint hidden" id="creativeReason"></p>
+        <div class="grid2">
+          <div>
+            <label for="format">Format cerita</label>
+            <select id="format"></select>
+          </div>
+          <div>
+            <label for="narrStyle">Gaya narasi</label>
+            <select id="narrStyle"></select>
+          </div>
+          <div>
+            <label for="minutes">Durasi target</label>
+            <select id="minutes"></select>
+          </div>
+          <div>
+            <label>Bahasa</label>
+            <div class="seg" id="langSeg">
+              <button data-v="id">Indonesia</button>
+              <button data-v="en">English</button>
+            </div>
+          </div>
+        </div>
+        <p class="hint" id="formatHint"></p>
+        <label class="check" id="loopRow" hidden><input type="checkbox" id="loop"> 🔁 Loop: kalimat akhir menyambung ke kalimat pembuka (Shorts)</label>
+
+        <div class="label-row">
+          <label>Gaya visual</label>
+          <button class="link" id="genStylePreviewsBtn" title="Buat semua contoh gambar gaya lewat Google Flow (disimpan & diunduh ke Downloads/Klipin/style-previews/)">🌊 Buat contoh di Flow</button>
+        </div>
+        <div class="progress hidden" id="styleGenProgress"><div></div></div>
+        <div class="chips style-cats" id="styleCats"></div>
+        <div class="styles" id="visualStyles"></div>
+      </div>
+
+      <button class="btn primary big" id="autoStartBtn">⚡ Buat Otomatis Sampai Jadi (Full AI)</button>
       <div class="footer-nav">
-        <button class="btn primary" data-next>Lanjut ke Naskah →</button>
+        <button class="btn" data-next>🛠️ Kerjakan Bertahap →</button>
       </div>
     </section>
 
@@ -58,51 +112,19 @@
     <section class="step" data-step="2">
       <div class="picked">🎯 <span id="pickedTitle">—</span></div>
 
-      <div class="grid2">
-        <div>
-          <label for="format">Format konten</label>
-          <select id="format"></select>
-        </div>
-        <div>
-          <label for="narrStyle">Gaya narasi</label>
-          <select id="narrStyle"></select>
-        </div>
-        <div>
-          <label for="minutes">Durasi</label>
-          <select id="minutes"></select>
-        </div>
-        <div>
-          <label>Bahasa</label>
-          <div class="seg" id="langSeg">
-            <button data-v="id">Indonesia</button>
-            <button data-v="en">English</button>
-          </div>
-        </div>
+      <div class="row">
+        <button class="btn primary" id="writeScriptBtn">📝 Tulis Naskah dari Judul</button>
       </div>
-      <p class="hint" id="formatHint"></p>
-      <label class="check" id="loopRow" hidden><input type="checkbox" id="loop"> 🔁 Loop: kalimat akhir menyambung ke kalimat pembuka (Shorts)</label>
-
-      <button class="btn primary" id="writeScriptBtn">📝 Tulis Naskah dari Judul</button>
+      <p class="hint hidden" id="scriptStatus"></p>
 
       <div class="label-row">
-        <label for="script">Naskah</label>
+        <label for="script">Naskah voiceover</label>
         <span class="meta" id="scriptMeta"></span>
       </div>
       <textarea id="script" rows="12" placeholder="Naskah akan muncul di sini. Boleh diedit atau tempel naskah sendiri."></textarea>
 
       <div class="card">
         <h3>🎙️ Suara / Voiceover</h3>
-        <p class="hint">Buat suara gratis di Google AI Studio → <i>Generate speech</i>. Salin style instruction &amp; naskah, pilih suara, Run, lalu download dan tarik file audionya ke kotak di bawah.</p>
-        <div class="label-row">
-          <label for="styleInstr">Style instruction</label>
-          <button class="link" id="copyStyleBtn">Salin</button>
-        </div>
-        <textarea id="styleInstr" rows="3"></textarea>
-        <div class="row">
-          <button class="btn" id="copyScriptBtn">📋 Salin Naskah</button>
-          <button class="btn" id="openStudioBtn">↗ Buka Google AI Studio</button>
-        </div>
-
         <div class="label-row">
           <label>Mesin suara &amp; narator</label>
           <button class="link hidden" id="refreshVoicesBtn">↻ muat suara</button>
@@ -110,115 +132,123 @@
         <div class="seg wrap" id="ttsEngineSeg"></div>
         <p class="hint" id="ttsHint"></p>
         <div class="voices" id="voices"></div>
-        <button class="btn ghost small" id="ttsApiBtn">⚡ Generate suara langsung via API</button>
+        <div class="row voice-custom">
+          <input type="text" id="customVoiceInput" placeholder="Atau ketik nama/ID suara baru…" />
+          <button class="btn small fit" id="applyCustomVoiceBtn">Pakai</button>
+        </div>
+
+        <button class="btn primary" id="ttsAutoBtn">⚡ Buat Suara Otomatis</button>
         <div class="progress hidden" id="ttsProgress"><div></div></div>
 
         <div class="drop" id="audioDrop">
           <input type="file" id="audioFile" accept="audio/*" hidden />
-          <div class="drop-empty">⬇︎ Tarik file audio ke sini<br /><small>atau klik untuk pilih (wav / mp3 / m4a)</small></div>
+          <div class="drop-empty">⬇︎ Tarik file audio ke sini<br /><small>atau klik untuk pilih manual (wav / mp3 / m4a)</small></div>
           <div class="drop-ready hidden">
             <div class="ok">✅ Audio siap · <span id="audioDur"></span></div>
             <audio id="audioPlayer" controls></audio>
           </div>
         </div>
+
+        <details class="manual">
+          <summary class="hint">⚙️ Atur style instruction, AI Studio manual &amp; potong jeda (<span id="trimMeta">belum dipotong</span>)</summary>
+          <div class="label-row">
+            <label for="styleInstr">Style instruction</label>
+            <button class="link" id="copyStyleBtn">Salin</button>
+          </div>
+          <textarea id="styleInstr" rows="3"></textarea>
+          <div class="row">
+            <button class="btn small" id="copyScriptBtn">📋 Salin Naskah</button>
+            <button class="btn small" id="openStudioBtn">↗ Buka AI Studio Manual</button>
+          </div>
+          <label for="maxPause">Jeda maksimal: <b id="maxPauseVal"></b></label>
+          <input type="range" id="maxPause" min="0.15" max="1" step="0.05" />
+          <button class="btn small" id="trimBtn">✂️ Potong Jeda &amp; Normalisasi Ulang</button>
+          <audio id="trimPlayer" class="hidden" controls></audio>
+        </details>
       </div>
 
       <div class="footer-nav">
         <button class="btn" data-prev>← Kembali</button>
-        <button class="btn primary" data-next>Lanjut →</button>
+        <button class="btn primary" data-next>Lanjut ke Storyboard →</button>
       </div>
     </section>
 
-    <!-- ============ STEP 3: VISUAL & SCENE ============ -->
+    <!-- ============ STEP 3: STORYBOARD (SCENE + GAMBAR) ============ -->
     <section class="step" data-step="3">
-      <label>Gaya visual</label>
-      <div class="styles" id="visualStyles"></div>
-
-      <div class="grid2">
-        <div>
-          <label>Rasio</label>
-          <div class="seg" id="ratioSeg"></div>
-        </div>
-        <div>
-          <label for="sceneSec">Panjang per scene</label>
-          <select id="sceneSec">
-            <option value="3">± 3 detik</option>
-            <option value="4">± 4 detik</option>
-            <option value="5">± 5 detik</option>
-            <option value="6">± 6 detik</option>
-            <option value="8">± 8 detik</option>
-            <option value="12">± 12 detik</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="label-row">
-          <h3>✂️ Potong jeda / diam</h3>
-          <span class="meta" id="trimMeta"></span>
-        </div>
-        <label for="maxPause">Jeda maksimal: <b id="maxPauseVal"></b></label>
-        <input type="range" id="maxPause" min="0.15" max="1" step="0.05" />
-        <button class="btn" id="trimBtn">✂️ Potong Jeda Sekarang</button>
-        <audio id="trimPlayer" class="hidden" controls></audio>
-      </div>
-
-      <div class="row">
-        <button class="btn primary" id="transcribeBtn">🎧 Transkrip otomatis + buat scene</button>
-        <button class="btn primary" id="fromScriptBtn">📄 Buat scene dari naskah</button>
-        <button class="btn" id="resyncBtn3" title="Tanpa mengubah teks/gambar scene">🔁 Sinkronkan ulang timing</button>
-      </div>
-      <div class="progress hidden" id="sceneProgress"><div></div></div>
-      <p class="hint">📄 <b>Buat scene dari naskah</b> cukup kalau suaranya dibuat dari naskah ini (cepat, tanpa AI). 🎧 Transkrip hanya perlu kalau suaramu berbeda dari naskah; audio panjang diproses per ±90 detik dan progresnya terlihat.</p>
-      <p class="hint" id="sceneInfo"></p>
-      <div class="scenes" id="sceneList"></div>
-
-      <div class="footer-nav">
-        <button class="btn" data-prev>← Kembali</button>
-        <button class="btn primary" data-next>Lanjut ke Gambar →</button>
-      </div>
-    </section>
-
-    <!-- ============ STEP 4: GAMBAR (FLOW) ============ -->
-    <section class="step" data-step="4">
       <div class="card flow-card">
         <div class="label-row">
           <h3>🌊 Google Flow</h3>
           <span class="pill" id="flowStatus">memeriksa…</span>
         </div>
-        <ol class="hint tight">
-          <li>Buka Flow, masuk ke sebuah project.</li>
-          <li>Tidak perlu atur apa-apa: Klipin otomatis mematikan mode <b>Agen</b>, memilih <b>Gambar</b>, rasio proyek, dan <b>x1</b> (1 gambar per prompt — paling cepat).</li>
-          <li>Klik <b>Kirim Semua ke Flow</b>, lalu biarkan berjalan sendiri.</li>
-        </ol>
+        <div class="grid2">
+          <div>
+            <label>Rasio</label>
+            <div class="seg" id="ratioSeg"></div>
+          </div>
+          <div>
+            <label for="sceneSec">Panjang per scene</label>
+            <select id="sceneSec">
+              <option value="3">± 3 detik</option>
+              <option value="4">± 4 detik</option>
+              <option value="5">± 5 detik</option>
+              <option value="6">± 6 detik</option>
+              <option value="8">± 8 detik</option>
+              <option value="12">± 12 detik</option>
+            </select>
+          </div>
+        </div>
         <div class="row">
-          <button class="btn" id="openFlowBtn">↗ Buka Google Flow</button>
-          <button class="btn" id="checkFlowBtn">↻ Cek koneksi</button>
+          <button class="btn small" id="openFlowBtn">↗ Buka / Buat Project Flow</button>
+          <button class="btn small" id="checkFlowBtn">↻ Cek koneksi</button>
         </div>
       </div>
 
       <div class="row">
-        <button class="btn primary" id="sendAllBtn">🚀 Kirim Semua ke Flow</button>
-        <button class="btn danger hidden" id="stopFlowBtn">■ Stop</button>
+        <button class="btn primary" id="buildStoryboardBtn">✨ Buat Storyboard</button>
+        <button class="btn primary" id="sendAllBtn">🎨 Generate Semua Gambar</button>
+        <button class="btn danger fit hidden" id="stopFlowBtn">■ Stop</button>
       </div>
-      <label class="check"><input type="checkbox" id="onlyMissing" checked /> Hanya scene yang belum punya gambar</label>
-      <label class="check">Kirim sekaligus
-        <select id="flowPar"><option>1</option><option>2</option><option>3</option><option>4</option><option selected>5</option></select>
-        prompt ke Flow</label>
-      <div class="progress hidden" id="flowProgress"><div></div></div>
-      <p class="hint" id="flowInfo"></p>
 
-      <div class="thumbs" id="thumbGrid"></div>
-      <p class="hint">Tip: tarik beberapa gambar sekaligus ke grid di atas untuk mengisi scene kosong secara berurutan.</p>
+      <details class="manual">
+        <summary class="hint">⚙️ Opsi lanjutan (transkrip audio, paralel Flow, sinkron ulang)</summary>
+        <div class="row">
+          <button class="btn small" id="transcribeBtn">🎧 Transkrip audio + buat scene</button>
+          <button class="btn small" id="resyncBtn3" title="Tanpa mengubah teks/gambar scene">🔁 Sinkronkan ulang timing</button>
+        </div>
+        <label class="check"><input type="checkbox" id="onlyMissing" checked /> Hanya scene yang belum punya gambar</label>
+        <label class="check">Kirim sekaligus
+          <select id="flowPar"><option>1</option><option>2</option><option>3</option><option>4</option><option selected>5</option></select>
+          prompt ke Flow</label>
+      </details>
+
+      <div class="progress hidden" id="sceneProgress"><div></div></div>
+      <div class="progress hidden" id="flowProgress"><div></div></div>
+      <div class="label-row">
+        <span class="hint" id="sceneInfo"></span>
+        <span class="meta" id="flowInfo"></span>
+      </div>
+
+      <div class="storyboard" id="storyboardList"></div>
+      <p class="hint">Tip: edit prompt langsung di kartu lalu klik ↻, atau tarik banyak gambar sekaligus ke daftar di atas.</p>
 
       <div class="footer-nav">
         <button class="btn" data-prev>← Kembali</button>
-        <button class="btn primary" data-next>Lanjut Render →</button>
+        <button class="btn primary" data-next>Lanjut ke Preview &amp; Render →</button>
       </div>
     </section>
 
-    <!-- ============ STEP 5: RENDER ============ -->
-    <section class="step" data-step="5">
+    <!-- ============ STEP 4: PREVIEW & RENDER ============ -->
+    <section class="step" data-step="4">
+      <div class="card preview-card">
+        <div class="label-row">
+          <h3>👁️ Pratinjau Frame</h3>
+          <span class="meta" id="previewTime">0:00 / 0:00</span>
+        </div>
+        <canvas id="previewCanvas" width="540" height="960"></canvas>
+        <input type="range" id="previewRange" min="0" max="60" step="0.1" value="0" />
+        <label class="check"><input type="checkbox" id="previewSafeZone" checked /> 📐 Tampilkan garis batas Safe Zone (hindari tombol Shorts/Reels)</label>
+      </div>
+
       <div class="grid2">
         <div>
           <label>Resolusi</label>
@@ -235,26 +265,27 @@
           </div>
         </div>
       </div>
+
       <label class="check"><input type="checkbox" id="subtitles" /> Tampilkan subtitle di video</label>
       <label class="check"><input type="checkbox" id="hookOn" /> Teks hook besar di 2 detik pertama</label>
       <div id="hookBox">
         <div class="row">
-          <input type="text" id="hookText" placeholder="Kosongkan = diusulkan AI saat render. Dua sisi: Rp100 RIBU | Rp60 RIBU" />
+          <input type="text" id="hookText" placeholder="Kosongkan = diusulkan AI. Dua sisi: Rp100 RIBU | Rp60 RIBU" />
           <button class="btn fit" id="hookSuggestBtn">✨ Usulkan</button>
         </div>
-        <p class="hint">Frame pertama yang dilihat orang saat menggulir. Ambil angka atau kontras inti dari kalimat pembuka.</p>
       </div>
+
       <label class="check"><input type="checkbox" id="calloutOn" /> Angka penting di layar (saat narator menyebutnya)</label>
       <div id="calloutBox">
         <div class="label-row">
-          <span class="hint">Satu baris per scene: <code>nomor scene: teks</code>. Kosongkan = dibuat AI saat render.</span>
+          <span class="hint">Satu baris per scene: <code>nomor scene: teks</code></span>
           <button class="btn fit" id="calloutSuggestBtn">✨ Usulkan</button>
         </div>
-        <textarea id="calloutText" rows="4" placeholder="3: Modal Rp25 JT&#10;5: Pakan −Rp7,2 JT&#10;8: Rp100 RB → Rp60 RB"></textarea>
+        <textarea id="calloutText" rows="3" placeholder="3: Modal Rp25 JT&#10;5: Pakan −Rp7,2 JT"></textarea>
       </div>
 
       <div class="summary" id="renderSummary"></div>
-      <button class="btn" id="resyncBtn" title="Hitung ulang kapan tiap gambar & subtitle muncul, dicocokkan dengan suara">🔁 Sinkronkan ulang gambar &amp; subtitle dengan audio</button>
+      <button class="btn small" id="resyncBtn">🔁 Sinkronkan ulang gambar &amp; subtitle dengan audio</button>
 
       <div class="row">
         <button class="btn primary big" id="renderBtn">🎬 Render MP4</button>
@@ -266,15 +297,15 @@
 
       <div class="footer-nav">
         <button class="btn" data-prev>← Kembali</button>
-        <button class="btn primary" data-next>Lanjut ke YouTube →</button>
+        <button class="btn primary" data-next>Lanjut ke Publish →</button>
       </div>
     </section>
 
-    <!-- ============ STEP 6: PAKET YOUTUBE ============ -->
-    <section class="step" data-step="6">
-      <h2>📺 Paket upload YouTube</h2>
-      <p class="hint">Judul, deskripsi (bab/timestamp otomatis dari scene), tag, dan thumbnail (ukuran mengikuti rasio video) untuk proyek ini.</p>
-      <button class="btn primary" id="ytGenBtn">✨ Buat Judul, Deskripsi &amp; Thumbnail</button>
+    <!-- ============ STEP 5: PUBLISH ============ -->
+    <section class="step" data-step="5">
+      <h2>📺 Paket Publish</h2>
+      <p class="hint">Judul, deskripsi/caption, tag, dan konsep thumbnail siap pakai untuk YouTube, Shorts, atau Reels.</p>
+      <button class="btn primary" id="ytGenBtn">✨ Buat Paket Publish &amp; Konsep Thumbnail</button>
 
       <div id="ytOut" class="hidden">
         <div class="label-row">
@@ -284,18 +315,18 @@
         <div class="options" id="ytTitles"></div>
 
         <div class="label-row">
-          <label for="ytDesc">Deskripsi</label>
+          <label for="ytDesc">Deskripsi / Caption</label>
           <span class="meta" id="ytDescMeta"></span>
           <button class="link" id="ytCopyDesc">Salin</button>
         </div>
-        <textarea id="ytDesc" rows="14"></textarea>
+        <textarea id="ytDesc" rows="10"></textarea>
 
         <div class="label-row">
           <label for="ytTags">Tag (pisahkan dengan koma)</label>
           <span class="meta" id="ytTagsMeta"></span>
           <button class="link" id="ytCopyTags">Salin</button>
         </div>
-        <textarea id="ytTags" rows="3"></textarea>
+        <textarea id="ytTags" rows="2"></textarea>
 
         <div class="card">
           <div class="label-row">
@@ -307,47 +338,53 @@
           <label>Jenis thumbnail <span class="meta" id="thumbTypesMeta"></span></label>
           <div class="chips" id="thumbTypes"></div>
           <p class="hint" id="thumbTypeHint"></p>
-          <button class="btn" id="thumbConceptBtn">✨ Buat konsep thumbnail</button>
+          <button class="btn" id="thumbConceptBtn">✨ Buat Ulang Konsep Thumbnail</button>
           <div class="concepts" id="thumbConcepts"></div>
           <button class="btn hidden" id="thumbConceptFlowBtn">🌊 Buat gambar semua konsep di Flow</button>
 
           <details class="manual" id="thumbManual">
-          <summary class="hint">Atur manual: teks, posisi, warna, latar</summary>
-          <label for="thumbText">Teks thumbnail</label>
-          <div class="chips" id="ytThumbTexts"></div>
-          <input type="text" id="thumbText" placeholder="2–4 kata, mis. RAHASIA TERKUBUR" />
-          <div class="grid2">
-            <div>
-              <label>Posisi teks</label>
-              <div class="seg" id="thumbPosSeg">
-                <button data-v="left">Kiri</button>
-                <button data-v="right">Kanan</button>
-                <button data-v="bottom">Bawah</button>
-                <button data-v="split" title="Teks dua sisi: tulis A | B">Dua sisi</button>
+            <summary class="hint">Atur manual: teks, posisi, warna, latar</summary>
+            <label for="thumbText">Teks thumbnail</label>
+            <div class="chips" id="ytThumbTexts"></div>
+            <input type="text" id="thumbText" placeholder="2–4 kata, mis. RAHASIA TERKUBUR" />
+            <div class="grid2">
+              <div>
+                <label>Posisi teks</label>
+                <div class="seg" id="thumbPosSeg">
+                  <button data-v="left">Kiri</button>
+                  <button data-v="right">Kanan</button>
+                  <button data-v="bottom">Bawah</button>
+                  <button data-v="split" title="Teks dua sisi: tulis A | B">Dua sisi</button>
+                </div>
+              </div>
+              <div>
+                <label>Warna</label>
+                <div class="seg" id="thumbColorSeg">
+                  <button data-v="yellow">Kuning</button>
+                  <button data-v="white">Putih</button>
+                  <button data-v="red">Merah</button>
+                </div>
               </div>
             </div>
-            <div>
-              <label>Warna</label>
-              <div class="seg" id="thumbColorSeg">
-                <button data-v="yellow">Kuning</button>
-                <button data-v="white">Putih</button>
-                <button data-v="red">Merah</button>
-              </div>
+            <label>Latar (klik untuk pilih)</label>
+            <div class="bgstrip" id="thumbBgs"></div>
+            <div class="row">
+              <button class="btn small" id="thumbUploadBtn">⬆ Upload latar</button>
             </div>
-          </div>
+            <details>
+              <summary class="hint">Prompt latar thumbnail</summary>
+              <textarea id="thumbPrompt" rows="3"></textarea>
+            </details>
+          </details>
 
-          <label>Latar (klik untuk pilih)</label>
-          <div class="bgstrip" id="thumbBgs"></div>
           <div class="row">
-            <button class="btn" id="thumbFlowBtn" title="Set rasio Flow ke 16:9 dulu">🌊 Buat latar khusus di Flow</button>
-            <button class="btn" id="thumbUploadBtn">⬆ Upload latar</button>
+            <button class="btn primary" id="thumbDlBtn">⬇ Download Thumbnail</button>
+            <button class="btn" id="exportBundleBtn">📦 Export Metadata</button>
           </div>
-          <details>
-            <summary class="hint">Prompt latar thumbnail (untuk Flow)</summary>
-            <textarea id="thumbPrompt" rows="4"></textarea>
-          </details>
-          </details>
-          <button class="btn primary" id="thumbDlBtn">⬇ Download Thumbnail (JPG)</button>
+          <div class="row">
+            <button class="btn small" id="ytAttachVideoBtn">⬆ Kirim Video ke YouTube Studio</button>
+            <button class="btn small" id="ytAttachThumbBtn">⬆ Kirim Thumbnail ke Studio</button>
+          </div>
         </div>
       </div>
 
@@ -356,6 +393,50 @@
       </div>
     </section>
   </main>
+
+  <!-- ============ PRATINJAU GAYA VISUAL ============ -->
+  <dialog id="stylePreviewDlg">
+    <div class="label-row">
+      <h2 id="stylePrevTitle">Gaya Visual</h2>
+      <button class="icon-btn" id="stylePrevCloseBtn" title="Tutup">✕</button>
+    </div>
+    <img id="stylePrevImg" class="style-prev-img" alt="Contoh gaya visual" />
+    <p class="hint" id="stylePrevBestFor"></p>
+    <p class="hint" id="stylePrevPrompt"></p>
+    <button class="btn" id="stylePrevFlowBtn">🌊 Buat Contoh Nyata di Flow</button>
+    <button class="btn primary" id="stylePrevUseBtn">✓ Pakai Gaya Ini</button>
+  </dialog>
+
+  <!-- ============ ANTREAN BATCH ============ -->
+  <dialog id="queueDlg">
+    <div class="label-row">
+      <h2>📋 Antrean Batch Otomatis</h2>
+      <button class="icon-btn" id="queueCloseBtn" title="Tutup">✕</button>
+    </div>
+    <p class="hint">Tempel daftar topik (satu baris = satu video). Klipin akan membuat semuanya berurutan dan menyimpannya ke folder <code>Downloads/Klipin/&lt;judul&gt;/</code>.</p>
+    <textarea id="queueTopics" rows="4" placeholder="Topik 1: Kenapa harga cabai melambung?&#10;Topik 2: Rahasia bisnis warung kopi keliling"></textarea>
+    <div class="grid2">
+      <div>
+        <label for="queuePreset">Preset</label>
+        <select id="queuePreset"></select>
+      </div>
+      <div>
+        <label for="queueVoiceSource">Sumber suara</label>
+        <select id="queueVoiceSource">
+          <option value="auto">Otomatis (API / AI Studio)</option>
+          <option value="aistudio">AI Studio Auto (Gratis)</option>
+          <option value="api">TTS API saja</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn" id="queueAddBtn">＋ Tambah ke Antrean</button>
+    <div class="list" id="queueList"></div>
+    <div class="row">
+      <button class="btn primary" id="queueRunBtn">▶ Jalankan Antrean</button>
+      <button class="btn danger hidden" id="queueStopBtn">■ Stop</button>
+      <button class="btn small fit" id="queueClearDoneBtn">Bersihkan Selesai</button>
+    </div>
+  </dialog>
 
   <!-- ============ PENGATURAN ============ -->
   <dialog id="settingsDlg">
@@ -383,7 +464,7 @@
       <p class="hint"><b>Claude Code / Cursor / lainnya</b>: buka folder <code>mcp</code> di folder Klipin, lalu klik dua kali
         <b>Pasang-Klipin-MCP</b> (<code>.command</code> di Mac, <code>.bat</code> di Windows).</p>
       <p class="hint">Setelah itu, biarkan Chrome terbuka dengan panel Klipin, lalu minta agent-mu:<br />
-        <i>"Pakai Klipin, buatkan video 3 menit tentang budidaya lele untuk pemula."</i></p>
+        <i>"Pakai Klipin, buatkan Shorts tentang budidaya lele untuk pemula."</i></p>
     </div>
     <p class="hint">Agent hanya bisa terhubung dari komputer ini (localhost). API key tidak pernah dikirim ke agent.</p>
     <button class="btn" id="agentCloseBtn">Tutup</button>

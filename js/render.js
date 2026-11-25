@@ -108,12 +108,14 @@ function wrapLines(ctx, text, maxW) {
 
 function drawSubtitle(ctx, text, w, h) {
   const vertical = h > w;
-  const size = Math.round(vertical ? w * 0.062 : h * 0.052);
+  const size = Math.round(vertical ? w * 0.06 : h * 0.052);
   ctx.font = `800 ${size}px "Inter", "Segoe UI", system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
-  const lines = wrapLines(ctx, text, w * 0.84);
+  const maxW = vertical ? w * 0.76 : w * 0.84;
+  const cx = vertical ? w * 0.46 : w / 2;
+  const lines = wrapLines(ctx, text, maxW);
   const lh = size * 1.25;
   const baseY = vertical ? h * 0.72 : h * 0.86;
   const y0 = baseY - ((lines.length - 1) * lh) / 2;
@@ -121,9 +123,9 @@ function drawSubtitle(ctx, text, w, h) {
     const y = y0 + k * lh;
     ctx.lineWidth = size * 0.2;
     ctx.strokeStyle = 'rgba(0,0,0,0.9)';
-    ctx.strokeText(ln, w / 2, y);
+    ctx.strokeText(ln, cx, y);
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(ln, w / 2, y);
+    ctx.fillText(ln, cx, y);
   });
 }
 
@@ -193,9 +195,9 @@ function drawHook(ctx, text, w, h, alpha) {
 // Angka penting di layar: kartu putih bergaya catatan papan tulis, muncul dengan efek "pop" saat scene-nya mulai.
 function drawCallout(ctx, text, w, h, age) {
   const vertical = h > w;
-  const base = Math.round(vertical ? w * 0.1 : h * 0.095);
+  const base = Math.round(vertical ? w * 0.095 : h * 0.095);
   const t = hookCase(text).trim();
-  const maxW = w * 0.82;
+  const maxW = vertical ? w * 0.74 : w * 0.82;
   const red = '#e02424';
   // baris = daftar [teks, warna]; bagian setelah "→" (hasil/perubahan) merah, sisanya hitam
   const [a, b] = t.split('→');
@@ -222,7 +224,7 @@ function drawCallout(ctx, text, w, h, age) {
   const lh = size * 1.04;
   const padX = size * 0.45, padY = size * 0.28;
   const bw = tw + padX * 2, bh = lh * lines.length + padY * 2;
-  const cx = vertical ? w / 2 : w * 0.06 + bw / 2;
+  const cx = vertical ? w * 0.46 : w * 0.06 + bw / 2;
   const cy = vertical ? h * 0.15 : h * 0.1 + bh / 2;
   const k = Math.min(1, age / 0.18);
   const scale = 0.7 + 0.3 * (1 - (1 - k) ** 3); // ease-out
@@ -301,6 +303,63 @@ function drawHookSides(ctx, parts, w, h, alpha) {
  */
 const STALL_MS = 20000; // encoder tidak mengeluarkan apa pun selama ini → dianggap macet
 
+function drawSafeZoneOverlay(ctx, w, h) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
+  ctx.fillStyle = 'rgba(250, 204, 21, 0.08)';
+  ctx.lineWidth = Math.max(2, Math.round(w * 0.004));
+  ctx.setLineDash([12, 8]);
+  if (h > w) {
+    // area aman 9:16: hindari ~14% atas, ~25% bawah, dan ~16% sisi kanan (tombol Shorts/Reels)
+    const x = w * 0.05, y = h * 0.12, sw = w * 0.79, sh = h * 0.63;
+    ctx.strokeRect(x, y, sw, sh);
+    ctx.fillStyle = 'rgba(250, 204, 21, 0.9)';
+    ctx.font = `700 ${Math.round(w * 0.028)}px system-ui, sans-serif`;
+    ctx.fillText('SAFE ZONE 9:16', x + 10, y + Math.round(w * 0.04));
+  } else {
+    const x = w * 0.05, y = h * 0.06, sw = w * 0.9, sh = h * 0.86;
+    ctx.strokeRect(x, y, sw, sh);
+  }
+  ctx.restore();
+}
+
+/**
+ * Gambar satu frame video pada waktu `t` (dipakai saat render MP4 dan live preview UI).
+ */
+export function drawFrame(ctx, { w, h, t, timeline, cues = [], hook = null, callouts = [], showSafeZone = false, cueState = null }) {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, w, h);
+  if (!timeline?.length) return;
+
+  let si = cueState ? cueState.si : 0;
+  while (si < timeline.length - 1 && t >= timeline[si].end) si++;
+  if (cueState) cueState.si = si;
+  const sc = timeline[si];
+  const p = Math.min(1, Math.max(0, (t - sc.start) / Math.max(0.001, sc.end - sc.start)));
+  const into = t - sc.start;
+  if (si > 0 && into < FADE && timeline[si - 1].bmp) {
+    const prev = timeline[si - 1];
+    const pp = Math.min(1, (t - prev.start) / Math.max(0.001, prev.end - prev.start));
+    const kb0 = kenBurns(prev.k, pp);
+    drawCover(ctx, prev.bmp, w, h, kb0.zoom, kb0.panX, kb0.panY, 1);
+  }
+  if (sc.bmp) {
+    const kb = kenBurns(sc.k, p);
+    drawCover(ctx, sc.bmp, w, h, kb.zoom, kb.panX, kb.panY, si > 0 && into < FADE ? into / FADE : 1);
+  }
+
+  if (cues.length) {
+    let ci = cueState ? cueState.ci : 0;
+    while (ci < cues.length - 1 && t >= cues[ci].end) ci++;
+    if (cueState) cueState.ci = ci;
+    if (t >= cues[ci].start && t < cues[ci].end) drawSubtitle(ctx, cues[ci].text, w, h);
+  }
+  const co = callouts.find((c) => t >= c.start && t < c.end);
+  if (co && !(hook && t < hook.sec)) drawCallout(ctx, co.text, w, h, t - co.start);
+  if (hook && t < hook.sec) drawHook(ctx, hook.text, w, h, Math.min(1, (hook.sec - t) / 0.3));
+  if (showSafeZone) drawSafeZoneOverlay(ctx, w, h);
+}
+
 export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtitles, hook, callouts, fileHandle, onProgress, signal }) {
   const { w, h } = outputSize(ratio, res);
   const usable = scenes.filter((s) => s.image);
@@ -375,7 +434,7 @@ async function encodeOnce({ w, h, fps, total, timeline, cues, hook, callouts, ac
     target,
     video: { codec: 'avc', width: w, height: h, frameRate: fps },
     ...(acfg ? { audio: { codec: acfg.mux, numberOfChannels: acfg.cfg.numberOfChannels, sampleRate: AUDIO_RATE } } : {}),
-    fastStart: fileHandle ? false : 'in-memory',
+    fastStart: fileHandle ? 'fragmented' : 'in-memory',
     firstTimestampBehavior: 'offset',
   });
 
@@ -426,36 +485,14 @@ async function encodeOnce({ w, h, fps, total, timeline, cues, hook, callouts, ac
   const nFrames = Math.ceil(total * fps);
   const t0 = performance.now();
   lastOut = t0;
-  let si = 0, ci = 0;
+  const cueState = { si: 0, ci: 0 };
 
   try {
     for (let f = 0; f < nFrames; f++) {
       if (signal?.aborted) throw new DOMException('Render dibatalkan', 'AbortError');
       if (encErr) throw encErr;
       const t = f / fps;
-      while (si < timeline.length - 1 && t >= timeline[si].end) si++;
-      const sc = timeline[si];
-
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, w, h);
-      const p = Math.min(1, Math.max(0, (t - sc.start) / Math.max(0.001, sc.end - sc.start)));
-      const into = t - sc.start;
-      if (si > 0 && into < FADE) {
-        const prev = timeline[si - 1];
-        const pp = Math.min(1, (t - prev.start) / Math.max(0.001, prev.end - prev.start));
-        const kb0 = kenBurns(prev.k, pp);
-        drawCover(ctx, prev.bmp, w, h, kb0.zoom, kb0.panX, kb0.panY, 1);
-      }
-      const kb = kenBurns(sc.k, p);
-      drawCover(ctx, sc.bmp, w, h, kb.zoom, kb.panX, kb.panY, si > 0 && into < FADE ? into / FADE : 1);
-
-      if (cues.length) {
-        while (ci < cues.length - 1 && t >= cues[ci].end) ci++;
-        if (t >= cues[ci].start && t < cues[ci].end) drawSubtitle(ctx, cues[ci].text, w, h);
-      }
-      const co = callouts.find((c) => t >= c.start && t < c.end);
-      if (co && !(hook && t < hook.sec)) drawCallout(ctx, co.text, w, h, t - co.start);
-      if (hook && t < hook.sec) drawHook(ctx, hook.text, w, h, Math.min(1, (hook.sec - t) / 0.3)); // memudar 0,3 detik terakhir
+      drawFrame(ctx, { w, h, t, timeline, cues, hook, callouts, cueState });
 
       feedAudioUntil(t + 1);
       const frame = new VideoFrame(canvas, { timestamp: Math.round((f * 1e6) / fps), duration: Math.round(1e6 / fps) });
@@ -483,9 +520,11 @@ async function encodeOnce({ w, h, fps, total, timeline, cues, hook, callouts, ac
     muxer.finalize();
     if (writable) await writable.close();
   } catch (e) {
-    try { venc.close(); aenc?.close(); } catch {}
     if (writable) await writable.abort().catch(() => {});
     throw e;
+  } finally {
+    try { if (venc.state !== 'closed') venc.close(); } catch {}
+    try { if (aenc && aenc.state !== 'closed') aenc.close(); } catch {}
   }
 
   const elapsed = (performance.now() - t0) / 1000;

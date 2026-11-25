@@ -303,6 +303,17 @@
   }
 
   let polling = false;
+  function findFlowErrorBanner() {
+    const els = [...document.querySelectorAll('[role="alert"], .mat-mdc-snack-bar-label, .cdk-overlay-container [role="status"]')].filter(visible);
+    for (const el of els) {
+      const txt = (el.innerText || '').trim();
+      if (/policy|violat|unsafe|blocked|credit|quota|limit|failed|gagal|diblokir|kebijakan/i.test(txt)) {
+        return txt.slice(0, 200);
+      }
+    }
+    return '';
+  }
+
   async function poll() {
     if (polling) return;
     polling = true;
@@ -311,8 +322,16 @@
         await sleep(1000);
         scanBatches();
         const now = Date.now();
+        const banner = findFlowErrorBanner();
         for (const j of jobs) {
-          if (!j.done && now - j.t0 > j.timeoutMs) { j.done = true; j.reject(new Error('Timeout: gambar tidak muncul di Flow.')); }
+          if (j.done) continue;
+          if (banner && now - j.t0 > 3000 && /policy|violat|unsafe|blocked|diblokir|kebijakan/i.test(banner)) {
+            j.done = true;
+            j.reject(Object.assign(new Error(`Flow menolak prompt: ${banner}`), { policyError: true }));
+          } else if (now - j.t0 > j.timeoutMs) {
+            j.done = true;
+            j.reject(new Error('Timeout: gambar tidak muncul di Flow.'));
+          }
         }
         if (tick % 6 === 5 && [...jobs].some((j) => !j.done && now - j.t0 > 15000)) await sweep();
         const left = [...jobs].filter((j) => !j.done).length;
@@ -375,6 +394,10 @@
     let found = null;
     while (Date.now() - t0 < timeoutMs) {
       await sleep(1000);
+      const banner = findFlowErrorBanner();
+      if (banner && Date.now() - t0 > 3000 && /policy|violat|unsafe|blocked|diblokir|kebijakan/i.test(banner)) {
+        throw Object.assign(new Error(`Flow menolak prompt: ${banner}`), { policyError: true });
+      }
       const fresh = currentImages().filter((img) => !seen.has(img.currentSrc || img.src));
       if (fresh.length) {
         found = fresh.sort((a, b) => b.naturalWidth - a.naturalWidth)[0];
@@ -414,10 +437,63 @@
     return { ...images[0], images };
   }
 
+  function isLoginOrGate() {
+    if (/accounts\.google\.com/i.test(location.hostname)) return true;
+    return [...document.querySelectorAll('button, a')].filter(visible)
+      .some((el) => /^(sign in|masuk|log in|login)\b/i.test((el.innerText || '').trim()));
+  }
+
+  function findNewProjectButton() {
+    const btns = [...document.querySelectorAll('button, a[role="button"]')].filter(visible);
+    const score = (b) => {
+      const txt = (b.innerText || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const label = (b.getAttribute('aria-label') || '').toLowerCase();
+      const all = `${txt} ${label}`;
+      if (/sign out|keluar|help|bantuan|feedback|masukan|settings|setelan/.test(all)) return -10;
+      if (/new project|proyek baru|create project|buat proyek/.test(all)) return 10;
+      if (/create with flow|mulai membuat|get started/.test(all)) return 6;
+      if (/\badd\b|\bplus\b|\+\s*(new|baru)?/.test(all) && txt.length < 24) return 4;
+      return 0;
+    };
+    const ranked = btns.map((b) => [score(b), b]).filter(([s]) => s > 0).sort((a, b) => b[0] - a[0]);
+    return ranked[0]?.[1] || null;
+  }
+
+  async function ensureNewProject() {
+    if (findInput()) return { ok: true, alreadyInProject: true, url: location.href };
+    if (isLoginOrGate()) {
+      return { ok: false, needsLogin: true, error: 'Belum login ke Google Flow — silakan login dulu di tab Flow.' };
+    }
+    status('membuka project baru di Flow…');
+    for (let attempt = 1; attempt <= 6; attempt++) {
+      if (findInput()) return { ok: true, url: location.href };
+      const btn = findNewProjectButton();
+      if (btn) {
+        await clickReal(btn, attempt);
+        for (let i = 0; i < 30; i++) {
+          await sleep(500);
+          if (findInput()) {
+            status('project baru siap ✓');
+            return { ok: true, url: location.href };
+          }
+          if (isLoginOrGate()) {
+            return { ok: false, needsLogin: true, error: 'Perlu login Google di tab Flow.' };
+          }
+        }
+      }
+      await sleep(1000);
+    }
+    return { ok: false, error: 'Tombol "Proyek baru / New project" tidak ditemukan di Flow.' };
+  }
+
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === 'TUYUL_PING') {
-      sendResponse({ ok: true, hasInput: !!findInput(), url: location.href });
+      sendResponse({ ok: true, hasInput: !!findInput(), needsLogin: isLoginOrGate(), url: location.href });
       return false;
+    }
+    if (msg?.type === 'TUYUL_FLOW_NEW_PROJECT') {
+      ensureNewProject().then(sendResponse, (e) => sendResponse({ ok: false, error: e.message }));
+      return true;
     }
     if (msg?.type === 'TUYUL_FLOW_CONFIGURE') {
       if (active) { sendResponse({ ok: false, error: 'Flow sedang memproses prompt.' }); return false; }
@@ -435,7 +511,7 @@
       // active dikurangi SEBELUM membalas, supaya prompt berikutnya tidak tertolak
       generate(msg)
         .then((r) => { active--; sendResponse({ ok: true, ...r }); })
-        .catch((e) => { active--; status(`gagal — ${e.message}`); sendResponse({ ok: false, error: e.message }); });
+        .catch((e) => { active--; status(`gagal — ${e.message}`); sendResponse({ ok: false, error: e.message, policyError: !!e.policyError }); });
       return true; // respons async
     }
     return false;

@@ -160,9 +160,9 @@ export const FORMATS = [
     guide: 'Struktur daftar: (1) Pembuka: sebut jumlah daftar dan ukuran penilaiannya, dan tahan satu hal ("nomor satu paling tak terduga") tanpa membukanya. (2) Urutan menaik dari yang paling biasa ke yang paling mengejutkan; kalau sulit diurutkan, taruh poin terkuat di awal dan di akhir. (3) Tiap poin: judul 2–4 kata, satu fakta atau angka mengejutkan, satu akibat bagi penonton, maksimal tiga kalimat. (4) Tiap dua poin ada penegas kecil yang menahan rasa penasaran ("yang berikutnya bikin saya berhenti"). (5) Poin terakhir benar-benar yang terkuat; jangan janji berlebihan. (6) Penutup: ajak penonton menyebut peringkat versinya.',
   },
   {
-    id: 'rantai', label: 'Rantai Masalah–Solusi', skipRules: ['hook', 'core10', 'density'],
+    id: 'rantai', label: 'Rantai Masalah–Solusi', skipRules: ['hook', 'core10', 'density'], shortWords: 125,
     hint: 'Satu tokoh, satu masalah: tiap solusi memunculkan masalah baru, terus sampai kondisi sekarang.',
-    guide: 'Tulis sebagai cerita tentang SATU tokoh atau usaha yang sama, bukan daftar alat atau fitur. Struktur: (1) Pembuka 0–3 detik: mulai di tengah kejadian pertama yang gagal atau janggal, dan tinggalkan satu pertanyaan yang belum terjawab; JANGAN membocorkan rantai, kesimpulan, atau pelajaran. (2) Tokoh punya satu keinginan jelas. (3) 5–7 tahap dengan pola "tapi → maka": tiap tahap = satu KEJADIAN konkret yang dialami tokoh (ada orang, tempat, ucapan), solusi yang dicoba, lalu akibat yang menimbulkan masalah baru; tiap tahap membuka pertanyaan kecil "lalu gimana?". (4) Maksimal 2–3 angka di seluruh cerita, disampaikan lewat kejadian atau ucapan tokoh; tanpa rincian pembukuan berurutan. (5) Bahasa lisan sehari-hari, kalimat pendek. (6) Tahap terakhir sampai kondisi atau teknologi sekarang; pelajaran satu kalimat di paling akhir, lahir dari kejadian, bukan ceramah. Semua fakta harus benar.',
+    guide: 'Tulis sebagai cerita tentang SATU tokoh atau usaha yang sama, bukan daftar alat atau fitur. Struktur: (1) Pembuka 0–3 detik: mulai di tengah kejadian pertama yang gagal atau janggal, dan tinggalkan satu pertanyaan yang belum terjawab; JANGAN membocorkan rantai, kesimpulan, atau pelajaran. (2) Tokoh punya satu keinginan jelas. (3) Jumlah tahap mengikuti durasi: Shorts 1 menit = 4–5 tahap dan naskah total ±120–130 kata (tiap tahap 2–3 kalimat pendek, satu kejadian per tahap, jangan menjejalkan beberapa solusi dalam satu tahap); video panjang 5–7 tahap. Pola "tapi → maka": tiap tahap = satu KEJADIAN konkret yang dialami tokoh (ada orang, tempat, ucapan), solusi yang dicoba, lalu akibat yang menimbulkan masalah baru; tiap tahap membuka pertanyaan kecil "lalu gimana?". (4) Maksimal 2–3 angka di seluruh cerita, disampaikan lewat kejadian atau ucapan tokoh; tanpa rincian pembukuan berurutan. (5) Bahasa lisan sehari-hari, kalimat pendek. (6) Tahap terakhir sampai kondisi atau teknologi sekarang; pelajaran satu kalimat di paling akhir, lahir dari kejadian atau ucapan tokoh (bukan kalimat umum bergaya nasihat atau kesimpulan "intinya…"), dan pertanyaan atau ajakan penutup tidak boleh mengulang pelajaran itu. Kalimat tanya di tengah cerita hanya dipakai kalau jawabannya datang di tahap berikutnya; hindari pertanyaan retoris yang tidak jelas maksudnya. Semua fakta harus benar.',
   },
   {
     id: 'cerita', label: 'Cerita Narasi (seperti novel)', skipRules: ['hook', 'core10', 'density'],
@@ -294,46 +294,136 @@ export const THUMB_TONE = {
   edukatif: 'jelas dan menantang rasa ingin tahu, sering memakai angka',
 };
 
+export const STYLE_PREVIEW_SUBJECT = 'traditional Indonesian spice market stall in warm daylight with woven baskets of red chilies and a faceless minimalist character silhouette, no text, no letters, no watermark';
+
+export const VISUAL_STYLE_CATS = [
+  { id: 'all', label: 'Semua' },
+  { id: 'explainer', label: 'Edukasi' },
+  { id: 'ilustrasi', label: 'Ilustrasi' },
+  { id: '3d', label: '3D & Miniatur' },
+  { id: 'sinematik', label: 'Sinematik & Misteri' },
+];
+
 export const VISUAL_STYLES = [
   {
-    id: 'stickman', label: 'Stickman Putih', emoji: '✏️',
+    id: 'stickman', cat: 'explainer', label: 'Stickman Putih', emoji: '✏️',
+    bestFor: 'Ekonomi, psikologi, explainer cepat', preview: 'assets/styles/stickman.jpg',
     prompt: 'minimalist white stickman characters with round heads and simple line bodies, drawn with clean thick black outlines on a plain soft off-white background, flat 2D doodle explainer style, simple props, expressive poses, no shading',
     guide: 'Satu ide per gambar. Maksimal 1–2 tokoh dengan ekspresi besar yang jelas terbaca (kaget, bingung, lega), properti besar yang disebut narasi, latar kosong atau minimal. Pakai metafora visual yang obvious (dinding = hambatan, kusut = rumit, panah menembus = solusi). Tanpa teks atau simbol rumit.',
   },
   {
-    id: 'purba', label: 'Manusia Purba', emoji: '🦴',
-    prompt: 'cute 3D clay-style prehistoric cavemen characters, soft stylized proportions, warm earthy tones, prehistoric landscape, playful but detailed, pixar-like lighting',
-    guide: 'Tokoh tanah liat 3D dengan emosi berlebihan dan humor ringan; aksi besar dengan properti sederhana (batu, api, tulang); sudut kamera bergantian antara lebar dan dekat; cahaya hangat dari api atau matahari.',
+    id: 'whiteboard', cat: 'explainer', label: 'Whiteboard Spidol', emoji: '🖍️',
+    bestFor: 'Bisnis, alur sebab-akibat, edukasi', preview: 'assets/styles/whiteboard.jpg',
+    prompt: 'clean hand-drawn whiteboard explainer illustration, bold black marker line art on crisp white board background with selective yellow and red marker highlights, neat simple diagrams and expressive doodle characters, minimalist educational scribe style',
+    guide: 'Gunakan sketsa sederhana seperti penjelasan di papan tulis: panah arah, perbandingan kiri-kanan, satu konsep per adegan, latar putih bersih dengan aksen kuning/merah untuk titik penting. Tanpa tulisan panjang.',
   },
   {
-    id: 'flat', label: 'Sejarah Flat', emoji: '📜',
+    id: 'kurzgesagt', cat: 'explainer', label: 'Vektor Sains Cerah', emoji: '🪐',
+    bestFor: 'Sains, luar angkasa, bagaimana-jika', preview: 'assets/styles/kurzgesagt.jpg',
+    prompt: 'modern flat vector science illustration in vibrant saturated palette, deep navy and bright cyan orange accents, smooth geometric shapes, subtle soft gradients, playful stylized minimalist characters, clean educational infographic aesthetic',
+    guide: 'Bentuk geometris bersih dengan kontras warna cerah di atas latar gelap atau langit luas; skala objek dramatis (kecil vs raksasa); satu metafora ilmiah yang mudah dicerna dalam 2 detik.',
+  },
+  {
+    id: 'isometrik', cat: 'explainer', label: 'Diorama 3D Isometrik', emoji: '🏙️',
+    bestFor: 'Rantai pasok, kota, teknologi, data', preview: 'assets/styles/isometrik.jpg',
+    prompt: 'clean 3D isometric miniature diorama illustration, fixed 45-degree angled perspective, crisp matte clay-like materials, soft studio daylight, organized architectural layout of buildings paths and tiny stylized figures, pastel and vibrant accents',
+    guide: 'Tampilkan ruang atau alur dari sudut isometrik atas sehingga hubungan antar tempat/tahap langsung terbaca (mis. kebun → truk → pasar); objek rapi dan bersih tanpa detail berantakan.',
+  },
+  {
+    id: 'infografis3d', cat: 'explainer', label: '3D Minimalis Modern', emoji: '🧊',
+    bestFor: 'Teknologi, keuangan syariah, strategi', preview: 'assets/styles/infografis3d.jpg',
+    prompt: 'modern minimalist 3D motion-design render, sleek matte geometric objects floating in deep obsidian to slate gradient space, crisp warm amber and cyan rim lighting, clean high-budget tech explainer aesthetic, generous negative space',
+    guide: 'Satu objek simbolik 3D di tengah-atas dengan pencahayaan tepi tajam dan latar gelap rapi sehingga teks hook dan angka callout sangat menonjol.',
+  },
+  {
+    id: 'flat', cat: 'ilustrasi', label: 'Sejarah Flat', emoji: '📜',
+    bestFor: 'Sejarah, kronologi, peradaban', preview: 'assets/styles/flat.jpg',
     prompt: 'flat vector illustration, historical educational style, muted vintage color palette, clean shapes, subtle paper texture, storybook composition',
     guide: 'Bentuk besar dengan palet terbatas 4–5 warna dan satu titik fokus; peta, garis waktu, dan simbol sebagai penanda; hindari detail kecil yang tidak terbaca di layar HP.',
   },
   {
-    id: 'sinematik', label: 'Sinematik Realistis', emoji: '🎬',
-    prompt: 'cinematic photorealistic film still, dramatic volumetric lighting, shallow depth of field, anamorphic lens, rich color grading, 35mm film look',
-    guide: 'Sebut sumber cahaya dan suasana (cahaya jendela dari samping, lampu jalan malam), sudut dan lensa (close-up, over-the-shoulder, wide establishing), satu subjek dominan. Palet warna konsisten antar scene. Hindari wajah ala foto stok dan tokoh nyata.',
+    id: 'papercut', cat: 'ilustrasi', label: 'Paper Cut / Kolase', emoji: '✂️',
+    bestFor: 'Cerita rakyat, sejarah, dokumenter hangat', preview: 'assets/styles/papercut.jpg',
+    prompt: 'layered 3D paper-cut craft collage art, textured colored cardstock and kraft paper layers with realistic soft drop shadows creating depth, warm handmade storybook diorama lighting, charming stylized silhouettes',
+    guide: 'Susun latar depan, tengah, dan belakang seperti potongan kertas berlapis dengan bayangan nyata; warna hangat dan komposisi panggung teater yang mudah dibaca di layar HP.',
   },
   {
-    id: 'anime', label: 'Anime', emoji: '🌸',
-    prompt: 'high quality anime illustration, detailed background art, vibrant colors, soft cel shading, studio-quality key visual',
-    guide: 'Deskripsikan tiap tokoh tetap (rambut, pakaian, warna) dan ulang kata demi kata di setiap scene; pakai sudut ala anime (low angle, close-up mata, garis kecepatan); saturasi warna tidak berlebihan; latar detail seperti key visual.',
-  },
-  {
-    id: 'kartun', label: 'Kartun 2D', emoji: '🎨',
+    id: 'kartun', cat: 'ilustrasi', label: 'Kartun 2D', emoji: '🎨',
+    bestFor: 'Edukasi ringan, top list, cerita santai', preview: 'assets/styles/kartun.jpg',
     prompt: 'colorful 2D cartoon illustration, bold outlines, friendly characters, bright saturated colors, children educational show style',
     guide: 'Tokoh bergaya acara edukatif tapi untuk penonton umum: kontur tegas, warna cerah, ekspresi berlebihan, objek besar yang jadi fokus; 1–2 tokoh per gambar.',
   },
   {
-    id: 'lukisan', label: 'Lukisan Klasik', emoji: '🖼️',
+    id: 'komikretro', cat: 'ilustrasi', label: 'Komik Retro Pop', emoji: '💥',
+    bestFor: 'Investigasi, rantai masalah, cerita cepat', preview: 'assets/styles/komikretro.jpg',
+    prompt: 'vintage retro comic book illustration, bold ink outlines, subtle Ben-Day halftone dot shading, slightly weathered newsprint texture, punchy contrasting colors, dynamic dramatic angles, energetic graphic novel panel',
+    guide: 'Gunakan sudut kamera dinamis (low angle, close-up reaksi, panel aksi) dengan bayangan tinta tegas dan warna kontras tinggi; sangat kuat untuk transisi cepat Shorts.',
+  },
+  {
+    id: 'cat_air', cat: 'ilustrasi', label: 'Cat Air Storybook', emoji: '🖌️',
+    bestFor: 'Biografi, kisah inspiratif, cerita narasi', preview: 'assets/styles/cat_air.jpg',
+    prompt: 'expressive hand-painted watercolor storybook illustration on cold-press textured paper, delicate ink linework, warm golden and soft indigo washes, gentle atmospheric glow, emotional narrative composition',
+    guide: 'Fokus pada suasana hangat, ekspresi lembut, dan cahaya alami; biarkan sapuan warna lembut di tepi sebagai ruang napas teks.',
+  },
+  {
+    id: 'anime', cat: 'ilustrasi', label: 'Anime', emoji: '🌸',
+    bestFor: 'Cerita narasi, tokoh, bagaimana-jika', preview: 'assets/styles/anime.jpg',
+    prompt: 'high quality anime illustration, detailed background art, vibrant colors, soft cel shading, studio-quality key visual',
+    guide: 'Deskripsikan tiap tokoh tetap (rambut, pakaian, warna) dan ulang kata demi kata di setiap scene; pakai sudut ala anime (low angle, close-up mata, garis kecepatan); saturasi warna tidak berlebihan; latar detail seperti key visual.',
+  },
+  {
+    id: 'purba', cat: '3d', label: 'Tanah Liat Purba', emoji: '🦴',
+    bestFor: 'Asal-usul, prasejarah, humor edukasi', preview: 'assets/styles/purba.jpg',
+    prompt: 'cute 3D clay-style prehistoric cavemen characters, soft stylized proportions, warm earthy tones, prehistoric landscape, playful but detailed, pixar-like lighting',
+    guide: 'Tokoh tanah liat 3D dengan emosi berlebihan dan humor ringan; aksi besar dengan properti sederhana (batu, api, tulang); sudut kamera bergantian antara lebar dan dekat; cahaya hangat dari api atau matahari.',
+  },
+  {
+    id: 'claymation', cat: '3d', label: 'Claymation Modern', emoji: '🧸',
+    bestFor: 'Cerita sehari-hari, usaha, kisah hangat', preview: 'assets/styles/claymation.jpg',
+    prompt: 'charming modern stop-motion claymation miniature scene, handcrafted plasticine characters and props with subtle tactile clay texture, warm cozy miniature studio lighting, shallow depth of field, charming handcrafted feel',
+    guide: 'Buat adegan terasa nyata seperti miniatur tanah liat buatan tangan: properti sehari-hari yang imut dan bertekstur, cahaya studio hangat, fokus pada 1–2 tokoh ekspresif.',
+  },
+  {
+    id: 'makro', cat: '3d', label: 'Miniatur Makro', emoji: '🔬',
+    bestFor: 'Hook 0–3 detik, fakta unik, dunia mikro', preview: 'assets/styles/makro.jpg',
+    prompt: 'hyper-detailed macro photography of a tiny miniature world, extreme close-up lens, crisp micro textures, floating dust motes in dramatic side sunbeam, ultra shallow depth of field, 35mm cinematic macro realism',
+    guide: 'Gunakan close-up ekstrem pada objek nyata/miniatur yang langsung membuat penonton berhenti untuk menebak apa yang mereka lihat; satu titik fokus tajam dengan latar blur kuat.',
+  },
+  {
+    id: 'pixel', cat: '3d', label: 'Pixel Art Retro', emoji: '👾',
+    bestFor: 'Teknologi, sejarah internet, top list', preview: 'assets/styles/pixel.jpg',
+    prompt: 'detailed 16-bit retro pixel art scene, crisp pixel clusters, rich nostalgic color palette, atmospheric lighting and glowing highlights, classic indie adventure game background and characters',
+    guide: 'Komposisi seperti adegan game 16-bit yang penuh karakter; objek besar agar tetap jelas di layar ponsel, jangan terlalu ramai detail mikro.',
+  },
+  {
+    id: 'sinematik', cat: 'sinematik', label: 'Sinematik Realistis', emoji: '🎬',
+    bestFor: 'Dokumenter, kronologi, berita', preview: 'assets/styles/sinematik.jpg',
+    prompt: 'cinematic photorealistic film still, dramatic volumetric lighting, shallow depth of field, anamorphic lens, rich color grading, 35mm film look',
+    guide: 'Sebut sumber cahaya dan suasana (cahaya jendela dari samping, lampu jalan malam), sudut dan lensa (close-up, over-the-shoulder, wide establishing), satu subjek dominan. Palet warna konsisten antar scene. Hindari wajah ala foto stok dan tokoh nyata.',
+  },
+  {
+    id: 'noir', cat: 'sinematik', label: 'Dokumenter Noir', emoji: '🕵️',
+    bestFor: 'Investigasi, kasus nyata, keuangan gelap', preview: 'assets/styles/noir.jpg',
+    prompt: 'prestige dark documentary noir film still, moody high-contrast shadows, single warm desk lamp or streetlamp cutting through soft mist, subtle 35mm film grain, muted teal and amber color grading, investigative thriller atmosphere',
+    guide: 'Bangun wibawa dokumenter investigasi dengan satu sumber cahaya keras, bayangan dalam, dan benda bukti konkret di latar depan (berkas, peta, meja kayu).',
+  },
+  {
+    id: 'lukisan', cat: 'sinematik', label: 'Lukisan Klasik', emoji: '🖼️',
+    bestFor: 'Sejarah dunia, biografi tokoh', preview: 'assets/styles/lukisan.jpg',
     prompt: 'classical oil painting, visible brush strokes, renaissance lighting, rich textures, museum masterpiece style',
     guide: 'Komposisi seperti lukisan klasik: satu cahaya utama (chiaroscuro), pose dramatis, latar sederhana; cocok untuk sejarah dan biografi.',
   },
   {
-    id: 'gelap', label: 'Dark Misteri', emoji: '🌑',
+    id: 'gelap', cat: 'sinematik', label: 'Dark Misteri', emoji: '🌑',
+    bestFor: 'Misteri belum terpecahkan, suasana tegang', preview: 'assets/styles/gelap.jpg',
     prompt: 'dark atmospheric digital painting, moody fog, low-key lighting, eerie mysterious mood, desaturated colors with cold highlights',
     guide: 'Satu sumber cahaya, kabut dan siluet; sisakan area gelap yang menimbulkan pertanyaan; sebagian objek hanya setengah terlihat; palet dingin; tanpa gore atau kekerasan grafis.',
+  },
+  {
+    id: 'dreamcore', cat: 'sinematik', label: 'Surealis / Liminal', emoji: '🌌',
+    bestFor: 'Psikologi, filosofi, paradoks sains', preview: 'assets/styles/dreamcore.jpg',
+    prompt: 'atmospheric surreal liminal space art, symmetrical quiet dreamlike architecture, soft eerie pastel twilight glow, floating symbolic object, hypnotic calm yet thought-provoking mood, ultra clean composition',
+    guide: 'Komposisi simetris yang tenang dan sedikit ganjil untuk menahan tatapan penonton selama narasi psikologi/filosofi; hindari horor grafis.',
   },
 ];
 
@@ -343,7 +433,13 @@ export const RATIOS = [
   { id: '1:1', label: '1:1 Feed', w: 1080, h: 1080 },
 ];
 
-// Suara bawaan Gemini TTS (sama dengan pilihan di Google AI Studio → Generate Speech).
+export const VIDEO_PRESETS = [
+  { id: 'shorts', label: '📱 Shorts / Reels', desc: '9:16 · 1 mnt · 4 dtk/scene', ratio: '9:16', minutes: 1, sceneSec: 4, res: 1080, fps: 30, loop: false },
+  { id: 'youtube', label: '📺 YouTube Panjang', desc: '16:9 · 5 mnt · 6 dtk/scene', ratio: '16:9', minutes: 5, sceneSec: 6, res: 1080, fps: 30, loop: false },
+  { id: 'feed', label: '⬜ Feed 1:1', desc: '1:1 · 1 mnt · 5 dtk/scene', ratio: '1:1', minutes: 1, sceneSec: 5, res: 1080, fps: 30, loop: false },
+];
+
+// Suara bawaan Gemini TTS (30 suara resmi; daftar lengkap juga bisa dimuat langsung dari API).
 export const VOICES = [
   { name: 'Charon', gender: 'L', desc: 'Informatif, dalam — cocok dokumenter' },
   { name: 'Enceladus', gender: 'L', desc: 'Bernapas, tenang — storyteller' },
@@ -353,6 +449,14 @@ export const VOICES = [
   { name: 'Fenrir', gender: 'L', desc: 'Bersemangat' },
   { name: 'Puck', gender: 'L', desc: 'Ceria, santai' },
   { name: 'Alnilam', gender: 'L', desc: 'Kuat, tegas' },
+  { name: 'Umbriel', gender: 'L', desc: 'Santai, tenang' },
+  { name: 'Algieba', gender: 'L', desc: 'Halus, lancar' },
+  { name: 'Rasalgethi', gender: 'L', desc: 'Informatif' },
+  { name: 'Schedar', gender: 'L', desc: 'Stabil, datar' },
+  { name: 'Achird', gender: 'L', desc: 'Ramah, hangat' },
+  { name: 'Zubenelgenubi', gender: 'L', desc: 'Kasual, natural' },
+  { name: 'Sadachbia', gender: 'L', desc: 'Lincah, hidup' },
+  { name: 'Sadaltager', gender: 'L', desc: 'Berwawasan, jelas' },
   { name: 'Gacrux', gender: 'P', desc: 'Dewasa, matang' },
   { name: 'Kore', gender: 'P', desc: 'Tegas, profesional' },
   { name: 'Aoede', gender: 'P', desc: 'Ringan, mengalir' },
@@ -361,6 +465,12 @@ export const VOICES = [
   { name: 'Sulafat', gender: 'P', desc: 'Hangat' },
   { name: 'Despina', gender: 'P', desc: 'Halus, lembut' },
   { name: 'Achernar', gender: 'P', desc: 'Lembut' },
+  { name: 'Callirrhoe', gender: 'P', desc: 'Santai, mengalir' },
+  { name: 'Autonoe', gender: 'P', desc: 'Cerah, ringan' },
+  { name: 'Erinome', gender: 'P', desc: 'Jernih, jelas' },
+  { name: 'Laomedeia', gender: 'P', desc: 'Ceria, bersemangat' },
+  { name: 'Pulcherrima', gender: 'P', desc: 'Lugas, ekspresif' },
+  { name: 'Vindemiatrix', gender: 'P', desc: 'Lembut, tenang' },
 ];
 
 export const AI_STUDIO_TTS_URL = 'https://aistudio.google.com/generate-speech';

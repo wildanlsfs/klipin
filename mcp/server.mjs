@@ -5,18 +5,19 @@
 //   AI agent ──stdio (MCP)──▶ server ini ──http://127.0.0.1:47816──▶ panel Klipin di Chrome
 //
 // Panel Klipin mengambil tugas lewat long-poll dan mengirim hasilnya kembali. Endpoint panel hanya
-// menerima permintaan dari extension (header khusus + Host localhost), jadi situs web lain tidak bisa
-// memakainya. Kalau beberapa agent menjalankan server ini sekaligus, yang pertama memegang port dan
-// sisanya meneruskan panggilan ke sana.
+// menerima permintaan dari extension (header khusus + Origin extension + Host localhost), jadi situs
+// web lain tidak bisa memakainya. Kalau beberapa agent menjalankan server ini sekaligus, yang
+// pertama memegang port dan sisanya meneruskan panggilan ke sana.
 
 import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 const PORT = Number(process.env.KLIPIN_PORT) || 47816;
-const VERSION = '1.0.0';
+const VERSION = '1.11.0';
 const CALL_WAIT_MS = Number(process.env.KLIPIN_CALL_WAIT_MS) || 50000; // batas tunggu satu panggilan tool (agent punya timeout sendiri)
 const PANEL_ALIVE_MS = 8000;
 
@@ -39,7 +40,7 @@ const str = (description, extra = {}) => ({ type: 'string', description, ...extr
 const num = (description, extra = {}) => ({ type: 'number', description, ...extra });
 const obj = (properties = {}, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
 
-const TOOLS = [
+export const TOOLS = [
   {
     name: 'klipin_status',
     description: 'Show the current Klipin project: title, script, audio, scenes/prompts/images, YouTube pack, Flow tab connection and which AI providers are configured. Call this first.',
@@ -79,8 +80,13 @@ const TOOLS = [
   },
   {
     name: 'klipin_voice',
-    description: 'Generate the voice-over directly via a TTS API (Gemini / OpenAI / ElevenLabs key needed in Klipin settings). Alternative: the user makes it for free in Google AI Studio and you load the file with klipin_load_audio.',
+    description: 'Generate the voice-over directly via a TTS API (Gemini / OpenAI / ElevenLabs key needed in Klipin settings). Alternative: call klipin_aistudio_voice for free automation via Google AI Studio, or klipin_load_audio from a file.',
     inputSchema: obj({ engine: str('TTS engine id, e.g. "gemini"'), voice: str('Voice name/id, e.g. "Charon" (see klipin_options)') }),
+  },
+  {
+    name: 'klipin_aistudio_voice',
+    description: 'Generate the voice-over automatically for free using Google AI Studio (aistudio.google.com/generate-speech) in Chrome. Long-running: may return a job_id — then call klipin_wait.',
+    inputSchema: obj({ voice: str('Voice name, e.g. "Charon", "Kore", "Puck" (see klipin_options)') }),
   },
   {
     name: 'klipin_load_audio',
@@ -104,7 +110,7 @@ const TOOLS = [
   },
   {
     name: 'klipin_images',
-    description: 'Generate scene images in Google Flow (the user must have a Flow project open in Chrome). Long-running: returns a job_id if not finished — then call klipin_wait.',
+    description: 'Generate scene images in Google Flow (auto-creates a new Flow project if needed when Chrome is logged in). Long-running: returns a job_id if not finished — then call klipin_wait.',
     inputSchema: obj({
       scenes: { type: 'array', items: { type: 'number' }, description: 'Only these scene numbers (regenerates them)' },
       only_missing: { type: 'boolean', description: 'Only scenes without an image (default true when `scenes` is not given)' },
@@ -148,17 +154,35 @@ const TOOLS = [
     inputSchema: obj({ kind: str('"video" (default) or "image"', { enum: ['video', 'image'] }), file: str('Absolute path instead of the last Klipin output') }),
   },
   {
+    name: 'klipin_run_pipeline',
+    description: 'Run the complete end-to-end Klipin pipeline automatically (title -> script -> voice -> storyboard -> Flow images -> render MP4 -> publish pack & thumbnail) and save everything into Downloads/Klipin/<project>/. Long-running: returns a job_id — then call klipin_wait.',
+    inputSchema: obj({
+      topic: str('Raw topic or idea for the video (omit to resume the current project)'),
+      preset: str('Project preset ("shorts" = 9:16 1 min, "youtube" = 16:9 5 min, "feed" = 1:1 1 min)', { enum: ['shorts', 'youtube', 'feed'] }),
+      format: str('Content format id (see klipin_options)'),
+      narration_style: str('Narration style id (see klipin_options)'),
+      visual_style: str('Visual style id (see klipin_options)'),
+      minutes: num('Target length in minutes'),
+      lang: str('Language', { enum: ['id', 'en'] }),
+      loop: { type: 'boolean', description: 'Shorts loop ending connecting back to the opening line' },
+      voice_source: str('Voice generator: "auto" (API if configured else AI Studio), "api", or "aistudio"', { enum: ['auto', 'api', 'aistudio'] }),
+      publish_pack: { type: 'boolean', description: 'Generate titles, description, thumbnail & metadata bundle (default true)' },
+      auto_creative: { type: 'boolean', description: 'Automatically choose best format, narration style, visual style, loop & voice from the topic when omitted (default true)' },
+    }),
+  },
+  {
     name: 'klipin_wait',
-    description: 'Wait (up to ~50 s) for a long-running job (images, render, voice) and report its progress/result.',
+    description: 'Wait (up to ~50 s) for a long-running job (images, render, voice, pipeline) and report its progress/result.',
     inputSchema: obj({ job_id: str('job_id returned earlier') }, ['job_id']),
   },
 ];
 
-const INSTRUCTIONS = `Klipin makes faceless YouTube videos inside the user's Chrome (extension "Klipin").
-Typical flow: klipin_status → klipin_titles (or klipin_set_title) → klipin_write_script → voice-over
-(klipin_voice if a TTS key is set, otherwise ask the user to create it free in Google AI Studio and give you the file path → klipin_load_audio)
-→ klipin_scenes → klipin_images (needs a Google Flow project open in Chrome) → klipin_render → klipin_youtube
-→ klipin_thumb_concepts (pick the concept that creates the most curiosity) → klipin_thumbnail concept=N.
+const INSTRUCTIONS = `Klipin makes faceless YouTube videos and Shorts/Reels inside the user's Chrome (extension "Klipin").
+Fastest full-auto flow: call klipin_run_pipeline (with topic + preset="shorts" or "youtube"), then keep calling klipin_wait until done.
+Granular flow: klipin_status → klipin_titles (or klipin_set_title) → klipin_write_script → voice-over
+(klipin_voice if a TTS API key is set, or klipin_aistudio_voice for free Google AI Studio automation, or klipin_load_audio)
+→ klipin_scenes → klipin_images (auto-opens/creates a Google Flow project if needed) → klipin_render → klipin_youtube
+→ klipin_thumb_concepts → klipin_thumbnail concept=N.
 Long tasks return a job_id: keep calling klipin_wait until done. Answer the user in their language (often Indonesian).`;
 
 // Tool yang boleh jalan bersamaan dengan tugas lain (hanya membaca).
@@ -166,9 +190,10 @@ const CONCURRENT = new Set(['klipin_status', 'klipin_options']);
 
 // ---------------------------------------------------------------- antrean tugas (instance utama)
 
-const jobs = new Map();
+export const jobs = new Map();
 const queue = [];
 const held = new Set(); // long-poll panel yang sedang menunggu
+const audioTokens = new Map(); // token → { file, name, exp }
 let panel = { client: null, seen: 0 };
 
 const panelAlive = () => held.size > 0 || Date.now() - panel.seen < PANEL_ALIVE_MS;
@@ -197,28 +222,38 @@ function dispatch() {
     clearTimeout(p.timer);
     job.status = 'running';
     job.started = Date.now();
-    send(p.res, 200, { job: { id: job.id, tool: job.tool, args: job.args } }, p.origin);
+    const payload = { job: { id: job.id, tool: job.tool, args: job.args } };
+    if (job.tool === 'klipin_load_audio' && job.args?.base64) job.args = null; // jangan tahan base64 besar di memori
+    send(p.res, 200, payload, p.origin);
   }
 }
 
-function finish(job, result) {
+export function finish(job, result) {
   if (job.status === 'done') return;
+  if (job.args?.token) audioTokens.delete(job.args.token);
+  job.args = null;
   job.status = 'done';
   job.result = result;
   job.waiters.splice(0).forEach((w) => w());
-  setTimeout(() => jobs.delete(job.id), 30 * 60000);
+  setTimeout(() => jobs.delete(job.id), 30 * 60000).unref();
   dispatch();
 }
 
 // tugas yang sedang jalan di panel yang sudah ditutup → gagal (jangan menggantung selamanya)
-setInterval(() => {
-  if (panelAlive()) return;
-  for (const j of jobs.values()) {
-    if (j.status === 'running' && Date.now() - panel.seen > 30000) {
-      finish(j, { ok: false, error: 'Panel Klipin ditutup sebelum tugas selesai. Buka lagi panel Klipin lalu ulangi.' });
+function startJobSweeper() {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [tok, info] of audioTokens) {
+      if (info.exp < now) audioTokens.delete(tok);
     }
-  }
-}, 5000).unref();
+    if (panelAlive()) return;
+    for (const j of jobs.values()) {
+      if (j.status === 'running' && now - panel.seen > 30000) {
+        finish(j, { ok: false, error: 'Panel Klipin ditutup sebelum tugas selesai. Buka lagi panel Klipin lalu ulangi.' });
+      }
+    }
+  }, 5000).unref();
+}
 
 function waitJob(job, ms = CALL_WAIT_MS) {
   return new Promise((resolve) => {
@@ -246,26 +281,54 @@ function toContent(job) {
   return { content };
 }
 
-const expandHome = (p) => (p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p);
+export const expandHome = (p) => {
+  const s = String(p || '');
+  return s === '~' || s.startsWith('~/') || s.startsWith('~\\') ? path.join(os.homedir(), s.slice(1)) : s;
+};
 const AUDIO_EXT = /\.(wav|mp3|m4a|aac|ogg|oga|flac|webm|opus)$/i;
 
 // Folder → file audio terbaru di dalamnya (30 menit terakhir). Nama file download AI Studio berisi jam,
 // jadi agent tidak bisa menebaknya. Dipanggil sebelum diteruskan ke server lain (yang mungkin versi lama).
-function resolveAudioPath(p) {
-  const file = path.resolve(expandHome(String(p || '')));
+export function resolveAudioPath(p) {
+  const file = path.resolve(expandHome(p));
   try {
     if (!fs.statSync(file).isDirectory()) return file;
   } catch {
     return file;
   }
-  const newest = fs.readdirSync(file).filter((f) => AUDIO_EXT.test(f))
-    .map((f) => ({ f: path.join(file, f), t: fs.statSync(path.join(file, f)).mtimeMs }))
-    .filter((x) => Date.now() - x.t < 30 * 60 * 1000).sort((a, b) => b.t - a.t)[0];
+  let newest;
+  try {
+    newest = fs.readdirSync(file).filter((f) => AUDIO_EXT.test(f))
+      .map((f) => {
+        const full = path.join(file, f);
+        try { return { f: full, t: fs.statSync(full).mtimeMs }; } catch { return null; }
+      })
+      .filter((x) => x && Date.now() - x.t < 30 * 60 * 1000)
+      .sort((a, b) => b.t - a.t)[0];
+  } catch (e) {
+    // macOS (TCC) sering menolak membaca ISI folder ~/Downloads untuk proses launchd (EPERM scandir), padahal
+    // membaca file bernama pasti tetap boleh. Download AI Studio selalu bernama
+    // "Generated Audio <Bulan> <tgl>, <tahun> - <jam>_<menit><AM|PM>.wav" (jam lokal saat diunduh), jadi tebak
+    // nama per menit untuk 30 menit terakhir dan cek lewat stat saja.
+    if (e?.code !== 'EPERM' && e?.code !== 'EACCES') throw e;
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const SUFFIXES = ['', ' (1)', ' (2)', ' (3)'];
+    for (let m = 0; m <= 30 && !newest; m++) {
+      const d = new Date(Date.now() - m * 60 * 1000);
+      const h12 = d.getHours() % 12 || 12;
+      const base = `Generated Audio ${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} - ${h12}_${String(d.getMinutes()).padStart(2, '0')}${d.getHours() < 12 ? 'AM' : 'PM'}`;
+      for (const suf of SUFFIXES) {
+        const cand = path.join(file, `${base}${suf}.wav`);
+        try { if (fs.statSync(cand).isFile()) { newest = { f: cand }; break; } } catch { /* belum ada */ }
+      }
+    }
+    if (!newest) return path.join(file, '(folder tidak bisa dibaca macOS, EPERM, dan tidak ada file "Generated Audio" dalam 30 menit terakhir).wav');
+  }
   return newest ? newest.f : path.join(file, '(tidak ada file audio baru dalam 30 menit terakhir).wav');
 }
 
 // forwarded = dari server Klipin lain (bisa versi lebih baru dengan tool yang belum dikenal di sini)
-async function runTool(name, args = {}, forwarded = false) {
+export async function runTool(name, args = {}, forwarded = false) {
   if (!TOOLS.some((t) => t.name === name) && !(forwarded && /^klipin_\w+$/.test(name))) return { content: [{ type: 'text', text: `Tool tidak dikenal: ${name}` }], isError: true };
   if (name === 'klipin_wait') {
     const job = jobs.get(String(args.job_id || ''));
@@ -279,7 +342,9 @@ async function runTool(name, args = {}, forwarded = false) {
     let st;
     try { st = fs.statSync(file); } catch { return { content: [{ type: 'text', text: `File tidak ditemukan: ${file}` }], isError: true }; }
     if (st.size > 150 * 1024 * 1024) return { content: [{ type: 'text', text: 'File audio terlalu besar (maks 150 MB).' }], isError: true };
-    args = { name: path.basename(file), base64: fs.readFileSync(file).toString('base64') };
+    const token = crypto.randomBytes(16).toString('hex');
+    audioTokens.set(token, { file, name: path.basename(file), exp: Date.now() + 10 * 60 * 1000 });
+    args = { name: path.basename(file), token };
   }
   const job = newJob(name, args);
   await waitJob(job);
@@ -310,14 +375,25 @@ function readBody(req, limit = 50 * 1024 * 1024) {
   });
 }
 
-function makeServer(sharedSecret) {
+function allowedExtOrigin(origin) {
+  if (!origin) return '';
+  if (process.env.KLIPIN_DEV_ORIGIN && origin === process.env.KLIPIN_DEV_ORIGIN) return origin;
+  if (process.env.KLIPIN_EXT_ID) {
+    return origin === `chrome-extension://${process.env.KLIPIN_EXT_ID}` ? origin : '';
+  }
+  return /^chrome-extension:\/\/[a-p]{32}$/.test(origin) ? origin : '';
+}
+
+export function makeServer(sharedSecret, port = PORT) {
   return http.createServer(async (req, res) => {
-    const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
+    const url = new URL(req.url, `http://127.0.0.1:${port}`);
     const origin = req.headers.origin || '';
-    // KLIPIN_DEV_ORIGIN: hanya untuk pengujian (panel dibuka dari server lokal, bukan dari extension)
-    const extOrigin = /^chrome-extension:\/\/[a-p]{32}$/.test(origin) || (origin && origin === process.env.KLIPIN_DEV_ORIGIN) ? origin : '';
+    const extOrigin = allowedExtOrigin(origin);
     // Tolak DNS rebinding: Host harus localhost.
-    if (!new RegExp(`^(127\\.0\\.0\\.1|localhost|\\[::1\\]):${PORT}$`).test(req.headers.host || '')) return send(res, 403, { error: 'host' });
+    const hostOk = port === 0
+      ? /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(req.headers.host || '')
+      : new RegExp(`^(127\\.0\\.0\\.1|localhost|\\[::1\\]):${port}$`).test(req.headers.host || '');
+    if (!hostOk) return send(res, 403, { error: 'host' });
 
     if (req.method === 'OPTIONS') {
       if (!extOrigin) return send(res, 403, { error: 'origin' });
@@ -340,9 +416,35 @@ function makeServer(sharedSecret) {
       }
     }
 
-    // endpoint panel: wajib header khusus (situs web tidak bisa mengirimnya lintas origin) + origin extension
+    // endpoint status untuk background service worker (boleh tanpa Origin)
     const client = req.headers['x-klipin-client'];
-    if (!client || (origin && !extOrigin)) return send(res, 403, { error: 'forbidden' });
+    if (!client) return send(res, 403, { error: 'forbidden' });
+
+    if (url.pathname === '/state' && req.method === 'GET') {
+      if (origin && !extOrigin) return send(res, 403, { error: 'origin' });
+      return send(res, 200, { pending: queue.length, alive: panelAlive(), version: VERSION }, extOrigin);
+    }
+
+    // endpoint panel & audio: wajib origin extension yang sah
+    if (!extOrigin) return send(res, 403, { error: 'origin' });
+
+    if (url.pathname.startsWith('/audio/') && req.method === 'GET') {
+      const tok = url.pathname.slice('/audio/'.length);
+      const entry = audioTokens.get(tok);
+      if (!entry || entry.exp < Date.now()) {
+        audioTokens.delete(tok);
+        return send(res, 404, { error: 'audio token invalid or expired' }, extOrigin);
+      }
+      audioTokens.delete(tok);
+      res.writeHead(200, {
+        'Content-Type': 'application/octet-stream',
+        'Cache-Control': 'no-store',
+        'Access-Control-Allow-Origin': extOrigin,
+        Vary: 'Origin',
+      });
+      fs.createReadStream(entry.file).on('error', () => res.destroy()).pipe(res);
+      return;
+    }
 
     if (url.pathname === '/poll' && req.method === 'GET') {
       if (panel.client && panel.client !== client && panelAlive()) return send(res, 200, { standby: true }, extOrigin);
@@ -359,9 +461,6 @@ function makeServer(sharedSecret) {
       held.add(p);
       return;
     }
-    if (url.pathname === '/state' && req.method === 'GET') {
-      return send(res, 200, { pending: queue.length, alive: panelAlive(), version: VERSION }, extOrigin);
-    }
     if ((url.pathname === '/progress' || url.pathname === '/result') && req.method === 'POST') {
       let body;
       try { body = await readBody(req); } catch (e) { return send(res, 400, { error: e.message }, extOrigin); }
@@ -371,7 +470,7 @@ function makeServer(sharedSecret) {
       if (job && url.pathname === '/result') finish(job, body);
       return send(res, 200, { ok: true }, extOrigin);
     }
-    send(res, 404, { error: 'not found' });
+    send(res, 404, { error: 'not found' }, extOrigin);
   });
 }
 
@@ -397,8 +496,9 @@ async function forward(sharedSecret, name, args) {
   return res.json();
 }
 
-const SECRET = secret();
+let SECRET = null;
 async function callTool(name, args) {
+  SECRET ||= secret();
   if (name === 'klipin_load_audio') args = { ...args, path: resolveAudioPath(args?.path) };
   if (!primary) {
     starting ||= becomePrimary(SECRET).then((ok) => { primary = ok; starting = null; });
@@ -449,21 +549,26 @@ async function handle(msg) {
   }
 }
 
-let buf = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => {
-  buf += chunk;
-  let i;
-  while ((i = buf.indexOf('\n')) >= 0) {
-    const line = buf.slice(0, i).trim();
-    buf = buf.slice(i + 1);
-    if (!line) continue;
-    let msg;
-    try { msg = JSON.parse(line); } catch { log('JSON tidak valid dari klien'); continue; }
-    handle(msg);
-  }
-});
-process.stdin.on('end', () => process.exit(0));
+const isEntrypoint = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isEntrypoint) {
+  SECRET = secret();
+  startJobSweeper();
+  let buf = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => {
+    buf += chunk;
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (!line) continue;
+      let msg;
+      try { msg = JSON.parse(line); } catch { log('JSON tidak valid dari klien'); continue; }
+      handle(msg);
+    }
+  });
+  process.stdin.on('end', () => process.exit(0));
 
-// Pegang port sejak awal supaya panel bisa langsung terhubung.
-starting = becomePrimary(SECRET).then((ok) => { primary = ok; starting = null; if (!ok) log('port sudah dipakai — meneruskan ke server Klipin yang sudah jalan'); });
+  // Pegang port sejak awal supaya panel bisa langsung terhubung.
+  starting = becomePrimary(SECRET).then((ok) => { primary = ok; starting = null; if (!ok) log('port sudah dipakai — meneruskan ke server Klipin yang sudah jalan'); });
+}

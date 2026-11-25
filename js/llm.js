@@ -5,7 +5,7 @@
 // - Transkrip: Gemini (audio inline) atau Whisper-compatible (/audio/transcriptions)
 
 import { decodeFile } from './audio.js';
-import { VISUAL_STYLES, THUMB_TYPES, THUMB_TONE } from './data.js';
+import { VISUAL_STYLES, THUMB_TYPES, THUMB_TONE, FORMATS, NARRATION_STYLES, VOICES } from './data.js';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_TIMEOUT_MS = 5 * 60 * 1000; // satu panggilan Gemini yang tidak menjawab 5 menit dianggap macet
@@ -152,6 +152,8 @@ const ruleLines = (s, kind, minutes, loop, skip) => (kind === 'script' ? scriptR
   .map((r) => `- ${r.text.trim()}`).join('\n');
 
 export const OPENAI_VOICES = [
+  { id: 'marin', name: 'Marin', gender: 'P', desc: 'Natural, ekspresif (rekomendasi)' },
+  { id: 'cedar', name: 'Cedar', gender: 'L', desc: 'Natural, jernih (rekomendasi)' },
   { id: 'onyx', name: 'Onyx', gender: 'L', desc: 'Dalam, berwibawa' },
   { id: 'echo', name: 'Echo', gender: 'L', desc: 'Jernih, tenang' },
   { id: 'ash', name: 'Ash', gender: 'L', desc: 'Hangat, ekspresif' },
@@ -203,6 +205,7 @@ export async function loadSettings() {
 }
 
 export async function saveSettings(s) {
+  resetBlockedModels();
   await chrome.storage.local.set({ settings: s });
 }
 
@@ -293,6 +296,7 @@ const FREE_FALLBACK = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-2.5-fl
 // Cadangan TTS yang masih menerima instruksi gaya di dalam teks (model TTS 3.8 membaca teks apa adanya).
 const TTS_FALLBACK = ['gemini-3.1-flash-tts-preview'];
 const blockedModels = new Set(); // model yang kuotanya habis/0 selama panel ini terbuka
+export function resetBlockedModels() { blockedModels.clear(); }
 
 const isQuotaErr = (e) => e.status === 429 || /quota|RESOURCE_EXHAUSTED/i.test(e.message);
 // model tidak ada / sudah ditutup untuk akun ini ("no longer available to new users")
@@ -429,10 +433,84 @@ export async function listModels(s, target) {
 
 // ---------------------------------------------------------------- prompt per tugas
 
+export function normalizeCreativeBrief(raw = {}, { formats = FORMATS, narrStyles = NARRATION_STYLES, vsList = VISUAL_STYLES, voices = VOICES, minutes = 1, fallback = {} } = {}) {
+  const fmt = formats.find((f) => f.id === raw?.format)?.id || fallback.format || formats[0].id;
+  const ns = narrStyles.find((n) => n.id === raw?.narration_style || n.id === raw?.narrStyle)?.id || fallback.narrStyle || narrStyles[0].id;
+  const vs = vsList.find((v) => v.id === raw?.visual_style || v.id === raw?.visualStyle)?.id || fallback.visualStyle || vsList[0].id;
+  const voice = voices.find((v) => v.name.toLowerCase() === String(raw?.voice || '').trim().toLowerCase())?.name || fallback.voice || voices[0].name;
+  const loop = Number(minutes) < 2 ? Boolean(raw?.loop) : false;
+  const reason = typeof raw?.reason === 'string' ? raw.reason.trim().slice(0, 220) : '';
+  return { format: fmt, narrStyle: ns, visualStyle: vs, loop, voice, reason };
+}
+
+// Panduan tambahan khusus output berbahasa Inggris untuk audiens global (kosong jika 'id').
+export function englishPromptGuide(kind, lang) {
+  if (lang !== 'en') return '';
+  switch (kind) {
+    case 'script':
+      return `<english_style>
+Write in crisp, natural spoken American English for a global YouTube/Shorts/Reels audience (never translated or textbook phrasing).
+Use short punchy sentences, active verbs, and natural contractions (it's, don't, that's).
+Use global units and currencies ($, %, days/months) unless the topic is specifically tied to another country.
+For engagement or comment questions, keep them global (e.g. "How much does this cost in your country?" or "Which would you pick: A or B?").
+</english_style>`;
+    case 'title':
+      return 'Global English style: write idiomatic, curiosity-driven YouTube titles in natural English using global units like $ and % (e.g. "Why a $5 Coffee Only Pays Farmers $0.10"). Avoid stiff translated phrasing.';
+    case 'hook':
+      return `- If the core is a comparison of two numbers or sides, write two short sides separated by " | ", 2–4 words each. Every number MUST have a short label so viewers don't misread it (e.g. "CAFE $5 | FARMER $0.10", "SOLD $100 | COST $60", "35 DAYS | 3 MONTHS").
+- Otherwise write one crisp phrase of 2–5 words (e.g. "70% NEVER REACHES THE FARMER").`;
+    case 'callout':
+      return `- Only numbers actually spoken in that scene's narration. Write with digits and compact global units ($25K, $3.80, 70%, 45 DAYS, 10 UNITS).
+- Max 5 words, no sequence labels ("First:", "Second:"). Comparisons/changes with "→" are encouraged (e.g. "$100 → $60", "Cost $25K", "Feed -$7.2K").`;
+    case 'youtube':
+      return 'Global English SEO style: write a natural spoken-English hook in the first 2 lines, search-friendly English tags for a global audience, and ultra-punchy 2–4 word English thumbnail text using global units like $ and % (avoid local currency unless the topic requires it).';
+    default:
+      return '';
+  }
+}
+
+export async function suggestCreativeBrief(s, { topic, preset = 'shorts', minutes = 1, lang = 'id' }) {
+  const vsList = visualStyles(s);
+  const fmtList = FORMATS.map((f) => `- ${f.id}: ${f.label} (${f.hint})`).join('\n');
+  const nsList = NARRATION_STYLES.map((n) => `- ${n.id}: ${n.label}`).join('\n');
+  const vsLines = vsList.map((v) => `- ${v.id}: ${v.label}${v.bestFor ? ` (cocok: ${v.bestFor})` : ''}`).join('\n');
+  const voiceLines = VOICES.map((v) => `- ${v.name}: ${v.desc}`).join('\n');
+  const isShort = Number(minutes) < 2;
+
+  const out = await generateJSON(s, 'title', `Kamu adalah creative director untuk channel video faceless (YouTube, Shorts, Reels) yang ahli memilih kemasan paling berpotensi ditonton sampai habis.
+Berdasarkan topik berikut, pilih kombinasi paling tepat untuk: format cerita, gaya narasi, gaya visual, mode loop, dan suara narator.
+
+Topik: """${topic}"""
+Preset: ${preset} (${isShort ? `video pendek ±${minutes} menit` : `video panjang ±${minutes} menit`})
+Bahasa: ${lang === 'en' ? 'English (audiens global berbahasa Inggris)' : 'Bahasa Indonesia'}
+
+Pilihan format:
+${fmtList}
+
+Pilihan gaya narasi:
+${nsList}
+
+Pilihan gaya visual:
+${vsLines}
+
+Pilihan suara narator:
+${voiceLines}
+
+Aturan:
+- Untuk video pendek (< 2 menit), hindari format "seluruh" (khusus video panjang).
+- Set "loop": true HANYA jika video pendek (< 2 menit) DAN cocok ditutup menggantung menyambung ke awal (bukan topik yang butuh pertanyaan komentar di akhir).
+- "reason": 1 kalimat singkat (${lang === 'en' ? 'natural English' : 'Bahasa Indonesia'}) alasan pemilihan paket kreatif ini.
+
+Balas HANYA JSON: {"format":"","narration_style":"","visual_style":"","loop":false,"voice":"","reason":""}`, (o) => o && typeof o === 'object');
+
+  return normalizeCreativeBrief(out, { formats: FORMATS, narrStyles: NARRATION_STYLES, vsList, voices: VOICES, minutes });
+}
+
 export async function expandTitle(s, raw, lang) {
+  const enGuide = englishPromptGuide('title', lang);
   const out = await generateJSON(s, 'title', `Kamu adalah ahli judul YouTube untuk channel faceless edukasi/dokumenter.
 Kembangkan judul/ide mentah berikut menjadi 5 judul video yang lebih menarik, rapi, memancing rasa penasaran, tetap jujur (tidak menyesatkan), dan SEO-friendly.
-Bahasa judul: ${lang === 'en' ? 'English' : 'Bahasa Indonesia'}. Maksimal 70 karakter per judul.
+Bahasa judul: ${lang === 'en' ? 'English (natural spoken American English)' : 'Bahasa Indonesia'}. Maksimal 70 karakter per judul.${enGuide ? `\n${enGuide}` : ''}
 
 Ide mentah: """${raw}"""
 
@@ -442,11 +520,25 @@ Balas HANYA JSON: {"titles": ["...", "..."]}`, (o) => Array.isArray(o) || Array.
 }
 
 const countWords = (t) => (t.match(/\S+/g) || []).length;
-const cleanScript = (t) => t.trim().replace(/^\s*[#*].*$/gm, '').replace(/\*\*/g, '').replace(/\n{3,}/g, '\n\n').trim();
+export const cleanScript = (t) => String(t || '')
+  .trim()
+  .replace(/^\s*#{1,6}\s+.*$/gm, '')
+  .replace(/^\s*[-*]\s+(?=\S)/gm, '')
+  .replace(/\*\*(.*?)\*\*/g, '$1')
+  .replace(/(^|\s)\*([^*\n]+)\*(?=\s|[.,!?;:]|$)/g, '$1$2')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim();
 
-export async function writeScript(s, { title, format, style, minutes, lang, wpm, loop }) {
-  const words = Math.round(minutes * wpm);
+export function targetWords(format, minutes, wpm = 150) {
+  if (Number(minutes) <= 1 && format?.shortWords) return format.shortWords;
+  return Math.round(Number(minutes) * wpm);
+}
+
+export async function writeScript(s, { title, format, style, minutes, lang, wpm, loop, onProgress }) {
+  const words = targetWords(format, minutes, wpm);
   const rules = ruleLines(s, 'script', minutes, loop, format.skipRules);
+  const enGuide = englishPromptGuide('script', lang);
+  onProgress?.('Menulis draf naskah…');
   let script = cleanScript(await generateText(s, 'script', `<peran>
 Kamu penulis naskah voiceover untuk video YouTube faceless. Tujuanmu satu: penonton bertahan sampai kalimat terakhir. Kamu menulis untuk telinga, dibacakan satu suara.
 </peran>
@@ -456,9 +548,9 @@ Judul: "${title}"
 Format konten: ${format.label} — ${format.hint}
 Gaya narasi: ${style.script}
 Target durasi: ±${minutes} menit (≈${words} kata, toleransi ±10%)
-Bahasa: ${lang === 'en' ? 'English' : 'Bahasa Indonesia yang natural (bukan terjemahan kaku)'}
+Bahasa: ${lang === 'en' ? 'English (natural spoken American English for global audience)' : 'Bahasa Indonesia yang natural (bukan terjemahan kaku)'}
 </brief>
-${format.guide ? `
+${enGuide ? `\n${enGuide}\n` : ''}${format.guide ? `
 <panduan_format>
 ${format.guide}
 </panduan_format>
@@ -477,11 +569,12 @@ Balas hanya dengan teks naskah yang dibacakan narator.
   // AI sering meleset jauh dari target kata (terutama naskah panjang) → satu kali revisi panjang naskah
   const n = countWords(script);
   if (n < words * 0.85 || n > words * 1.2) {
+    onProgress?.('Menyesuaikan panjang naskah…');
     const longer = n < words;
     const fixed = cleanScript(await generateText(s, 'script', `Naskah voiceover berikut ${longer ? 'terlalu pendek' : 'terlalu panjang'}: ${n} kata, targetnya ±${words} kata (±${minutes} menit).
 Tulis ulang LENGKAP menjadi ±${words} kata. ${longer ? 'Tambah isi yang benar-benar baru (fakta, angka, contoh, akibat), bukan mengulang atau memperlambat.' : 'Pangkas bagian yang paling lemah atau berulang, pertahankan pembuka, angka inti, dan penutup.'}
-Judul: "${title}". Gaya narasi: ${style.script}. Tetap patuhi aturan:
-${rules}
+Judul: "${title}". Bahasa: ${lang === 'en' ? 'English' : 'Bahasa Indonesia'}. Gaya narasi: ${style.script}. Tetap patuhi aturan:
+${rules}${enGuide ? `\n${enGuide}` : ''}
 
 Naskah:
 ${script}
@@ -489,13 +582,15 @@ ${script}
 Balas hanya dengan naskah barunya.`));
     if (Math.abs(countWords(fixed) - words) < Math.abs(n - words)) script = fixed;
   }
-  return editRetention(s, { script, title, format, style, words, rules });
+  onProgress?.('Memoles retensi naskah…');
+  return editRetention(s, { script, title, format, style, words, rules, lang });
 }
 
 // Editor retensi: satu kali pemeriksaan naskah dengan daftar periksa yang tidak bergantung pada niche.
 // Hanya bagian yang gagal diperbaiki; hasilnya dibuang kalau panjangnya meleset atau kosong.
-async function editRetention(s, { script, title, format, style, words, rules }) {
+async function editRetention(s, { script, title, format, style, words, rules, lang }) {
   try {
+    const enGuide = englishPromptGuide('script', lang);
     const edited = cleanScript(await generateText(s, 'script', `<peran>
 Kamu editor naskah video yang tugasnya satu: membuat penonton bertahan sampai kalimat terakhir. Kamu memperbaiki naskah yang sudah ada, bukan menulis dari nol.
 </peran>
@@ -504,7 +599,7 @@ Kamu editor naskah video yang tugasnya satu: membuat penonton bertahan sampai ka
 1. Baca naskah sambil membayangkan penonton yang siap menggeser layar kapan saja.
 2. Untuk tiap butir di <daftar_periksa>, tentukan lulus atau gagal.
 3. Tulis ulang HANYA kalimat atau paragraf yang gagal. Bagian yang lulus disalin persis, kata demi kata.
-4. Panjang total harus ±${words} kata (jangan lebih pendek dari ${Math.round(words * 0.95)} kata). Kalau ada bagian yang dihapus, ganti dengan isi baru yang lebih kuat, bukan memangkas.
+4. Panjang total harus ±${words} kata (jangan lebih pendek dari ${Math.round(words * 0.92)} kata). Kalau ada bagian yang dihapus, ganti dengan isi baru yang lebih kuat, bukan memangkas.
 </cara_kerja>
 
 <daftar_periksa>
@@ -535,10 +630,11 @@ Sesudah (lulus): "[Tokoh bernama] melakukan [tindakan spesifik]. Pada [tahun], [
 
 <konteks>
 Judul: "${title}"
+Bahasa: ${lang === 'en' ? 'English (natural spoken American English)' : 'Bahasa Indonesia'}
 Format: ${format.label}${format.guide ? `\nPanduan format:\n${format.guide}` : ''}
 Gaya narasi: ${style.script}
 Aturan tambahan yang tetap berlaku:
-${rules}
+${rules}${enGuide ? `\n${enGuide}` : ''}
 </konteks>
 
 <naskah>
@@ -549,7 +645,7 @@ ${script}
 Balas hanya dengan naskah akhir yang utuh, tanpa catatan, judul, atau penjelasan.
 </keluaran>`));
     const n = countWords(edited);
-    return edited && n >= words * 0.9 && n <= words * 1.25 ? edited : script;
+    return edited && n >= words * 0.85 && n <= words * 1.25 ? edited : script;
   } catch {
     return script;
   }
@@ -576,9 +672,10 @@ Balas HANYA JSON: {"scenes":[{"i":<nomor>,"prompt":"..."}]}`, (o) => Array.isArr
 // Paket upload YouTube: judul, deskripsi, tag, teks & prompt thumbnail, bab (chapters).
 export async function youtubePack(s, { title, script, scenes, lang, ratio }) {
   const en = lang === 'en';
+  const enGuide = englishPromptGuide('youtube', lang);
   const list = scenes.map((x) => `${x.i}. [${x.t}] ${x.text.slice(0, 140)}`).join('\n');
   const out = await generateJSON(s, 'youtube', `Kamu adalah strategist YouTube untuk channel faceless edukasi/dokumenter yang ahli CTR & SEO.
-Buat paket upload untuk video berikut. Bahasa output: ${en ? 'English' : 'Bahasa Indonesia yang natural'} (kecuali "thumbPrompt": Bahasa Inggris).
+Buat paket upload untuk video berikut. Bahasa output: ${en ? 'English (natural spoken American English)' : 'Bahasa Indonesia yang natural'} (kecuali "thumbPrompt": Bahasa Inggris).${enGuide ? `\n${enGuide}` : ''}
 
 Judul kerja: "${title}"
 Naskah (ringkas):
@@ -641,8 +738,8 @@ ${ruleLines(s, 'thumb', null)}
 
 Isi tiap konsep:
 - "type": id jenisnya.
-- "idea": 1 kalimat ${en ? 'English' : 'Bahasa Indonesia'} untuk pengguna: kenapa konsep ini bikin penasaran dan apa yang terlihat.
-- "text": teks thumbnail ${en ? 'English' : 'Bahasa Indonesia'} sesuai aturan jenisnya.
+- "idea": 1 kalimat ${en ? 'natural English' : 'Bahasa Indonesia'} untuk pengguna: kenapa konsep ini bikin penasaran dan apa yang terlihat.
+- "text": teks thumbnail ${en ? 'natural punchy English (use global units like $ and % if applicable)' : 'Bahasa Indonesia'} sesuai aturan jenisnya.
 - "color": warna aksen teks: "yellow", "white", atau "red".
 - "prompt": prompt gambar Bahasa Inggris 2–4 kalimat: diawali gaya visual di atas, lalu subjek spesifik dari naskah, komposisi sesuai jenis, ekspresi, pencahayaan, ruang kosong untuk teks, dan "no text, no letters, no numbers, no logos, no watermark".
 
@@ -663,6 +760,10 @@ Balas HANYA JSON: {"concepts":[{"type":"","idea":"","text":"","color":"","prompt
 // yang sedang menggulir langsung melihat alasan untuk berhenti.
 export async function hookText(s, { title, script, lang }) {
   const en = lang === 'en';
+  const hookGuide = en
+    ? englishPromptGuide('hook', 'en')
+    : `- Kalau intinya perbandingan dua angka/hal, tulis dua sisi dipisah " | ", masing-masing 2–4 kata. Tiap angka WAJIB diberi label singkat apa angka itu, supaya tidak disangka angka lain (mis. disangka untung): "HARGA Rp25 RB | IKAN Rp5 RB", "JUAL Rp100 RB | MODAL Rp60 RB", "35 HARI | 3 BULAN".
+- Kalau bukan, tulis satu frasa 2–5 kata (contoh: "70% TIDAK SAMPAI KE PETANI").`;
   const out = await generateJSON(s, 'youtube', `Video pendek berjudul "${title}". Kalimat pembuka naskahnya:
 ${script.split(/\n\s*\n/).slice(0, 2).join('\n').slice(0, 600)}
 
@@ -672,8 +773,7 @@ ${script.slice(0, 2500)}
 Tulis teks besar yang tampil di layar selama 2 detik pertama video, supaya orang yang sedang menggulir berhenti.
 Aturan:
 - Ambil kontras atau angka INTI dari kalimat pembuka (bukan dari bagian lain), dan hanya fakta yang ada di naskah.
-- Kalau intinya perbandingan dua angka/hal, tulis dua sisi dipisah " | ", masing-masing 2–4 kata. Tiap angka WAJIB diberi label singkat apa angka itu, supaya tidak disangka angka lain (mis. disangka untung): "HARGA Rp25 RB | IKAN Rp5 RB", "JUAL Rp100 RB | MODAL Rp60 RB", "35 HARI | 3 BULAN".
-- Kalau bukan, tulis satu frasa 2–5 kata (contoh: "70% TIDAK SAMPAI KE PETANI").
+${hookGuide}
 - Angka harus sama persis dengan naskah dan tetap bermakna sama (biaya tetap biaya, untung tetap untung). Jangan membulatkan atau menghitung ulang.
 - Jangan mengulang judul kata per kata dan jangan menjawab pertanyaannya. Tanpa emoji dan tanpa tanda pagar.
 - Bahasa: ${en ? 'English' : 'Bahasa Indonesia'}.
@@ -686,14 +786,17 @@ Balas HANYA JSON: {"text":""}`, (o) => typeof o.text === 'string' && o.text.trim
 // (mis. "Pakan −Rp3,8 JT"). Hasil: [{ i, text }].
 export async function sceneCallouts(s, { title, scenes, lang }) {
   const en = lang === 'en';
+  const calloutGuide = en
+    ? englishPromptGuide('callout', 'en')
+    : `- Hanya angka yang benar-benar disebut di narasi scene itu. Tulis dengan digit dan singkatan (Rp25 JT, Rp3.800, 70%, 45 HARI, 10 EKOR).
+- Maks 5 kata, tanpa label urutan (jangan "Pertama:", "Kedua:"). Boleh perbandingan/perubahan dengan "→" (contoh: "Rp100 RB → Rp60 RB", "Modal Rp25 JT", "Pakan −Rp7,2 JT").`;
   const list = scenes.map((x) => `${x.i}. ${x.text.slice(0, 220)}`).join('\n');
   const out = await generateJSON(s, 'scene', `Video "${title}". Narasi per scene:
 ${list.slice(0, 9000)}
 
 Pilih scene yang narasinya menyebut ANGKA KUNCI (harga, biaya, untung/rugi, persen, jumlah, lama waktu), lalu tulis teks catatan pendek yang tampil di layar selama scene itu, seperti angka yang dicoret di papan tulis.
 Aturan:
-- Hanya angka yang benar-benar disebut di narasi scene itu. Tulis dengan digit dan singkatan (Rp25 JT, Rp3.800, 70%, 45 HARI, 10 EKOR).
-- Maks 5 kata, tanpa label urutan (jangan "Pertama:", "Kedua:"). Boleh perbandingan/perubahan dengan "→" (contoh: "Rp100 RB → Rp60 RB", "Modal Rp25 JT", "Pakan −Rp7,2 JT").
+${calloutGuide}
 - Maks sekitar 40% dari jumlah scene; lewati scene tanpa angka atau yang angkanya tidak penting. Sebar bertahap sepanjang video (angka muncul satu per satu mengikuti narasi), jangan menumpuk di satu bagian dan jangan membiarkan lebih dari ±15 detik berlalu tanpa angka kalau narasinya masih menyebut angka. Scene 1 dilewati (sudah ada teks hook).
 - Jangan mengulang teks yang sama di dua scene berturut-turut.
 - Bahasa: ${en ? 'English' : 'Bahasa Indonesia'}.
@@ -741,7 +844,155 @@ export async function elevenVoices(s) {
   }));
 }
 
-function chunkText(text, max) {
+export function parseVoicesPayload(payload, fallback = [], { mergeFallback = true } = {}) {
+  const normFb = (Array.isArray(fallback) ? fallback : [])
+    .map((f) => {
+      const id = String(f?.id || f?.name || '').trim();
+      return id ? { id, name: String(f?.name || id).trim(), gender: f?.gender || '', desc: String(f?.desc || '').trim() } : null;
+    })
+    .filter(Boolean);
+  const fbMap = new Map(normFb.map((f) => [f.id.toLowerCase(), f]));
+
+  const raw = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.voices)
+    ? payload.voices
+    : Array.isArray(payload?.data)
+    ? payload.data
+    : [];
+
+  const parsed = [];
+  const seen = new Set();
+  for (const item of raw) {
+    let id = '', name = '', gender = '', desc = '';
+    if (typeof item === 'string') {
+      id = name = item.trim();
+    } else if (item && typeof item === 'object') {
+      id = String(item.voice_id || item.voiceId || item.id || item.name || '').trim().replace(/^voices\//, '');
+      if (!id) continue;
+      const rawName = String(item.display_name || item.displayName || (item.name ? String(item.name).replace(/^voices\//, '') : '') || id).trim();
+      name = rawName || id;
+      const g = String(item.gender || item.labels?.gender || '').trim().toLowerCase();
+      gender = /^(female|woman|f|p)$/.test(g) ? 'P' : /^(male|man|m|l)$/.test(g) ? 'L' : '';
+      const parts = [];
+      const seenDesc = new Set();
+      for (const p of [
+        item.type && item.type !== 'prebuilt' ? item.type : '',
+        item.persona,
+        item.description,
+        item.accent,
+        item.labels?.description,
+        item.labels?.accent,
+        item.labels?.use_case,
+      ]) {
+        const s = String(p || '').trim();
+        if (s && !seenDesc.has(s.toLowerCase())) {
+          seenDesc.add(s.toLowerCase());
+          parts.push(s);
+        }
+      }
+      desc = parts.join(', ').slice(0, 72);
+    }
+    if (!id) continue;
+    const key = id.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const fb = fbMap.get(key);
+    parsed.push({
+      id,
+      name: fb && name.toLowerCase() === id.toLowerCase() ? fb.name : name,
+      gender: gender || fb?.gender || '',
+      desc: desc || fb?.desc || '',
+    });
+  }
+
+  if (!parsed.length) return normFb;
+  if (!mergeFallback) return parsed;
+  return [...parsed, ...normFb.filter((f) => !seen.has(f.id.toLowerCase()))];
+}
+
+export async function listVoices(s, engineId) {
+  if (engineId === 'gemini' || engineId === 'aistudio') {
+    const fallback = VOICES.map((v) => ({ ...v, id: v.name }));
+    if (!s.gemini?.key) {
+      return {
+        voices: fallback,
+        source: 'builtin',
+        note: `${fallback.length} suara bawaan Gemini (isi Gemini API key untuk cek suara terbaru dari API).`,
+      };
+    }
+    try {
+      const all = [];
+      let pageToken = '';
+      for (let page = 0; page < 5; page++) {
+        const url = `${GEMINI_BASE}/voices?page_size=100${pageToken ? `&page_token=${encodeURIComponent(pageToken)}` : ''}`;
+        const j = await (await request(url, { headers: { 'x-goog-api-key': s.gemini.key } }, 'Gemini Voices', 15000)).json();
+        all.push(...(j.voices || []));
+        pageToken = j.nextPageToken || j.next_page_token || '';
+        if (!pageToken) break;
+      }
+      if (all.length) {
+        const voices = parseVoicesPayload(all, fallback, { mergeFallback: true });
+        return { voices, source: 'api', note: `${voices.length} suara dimuat dari Gemini API.` };
+      }
+      return { voices: fallback, source: 'builtin', note: `Menampilkan ${fallback.length} suara bawaan Gemini.` };
+    } catch (e) {
+      return {
+        voices: fallback,
+        source: 'builtin',
+        note: `Menampilkan ${fallback.length} suara bawaan Gemini (cek API /voices gagal: ${e.message.slice(0, 70)}).`,
+      };
+    }
+  }
+
+  if (engineId === 'eleven') {
+    const voices = await elevenVoices(s);
+    return { voices, source: 'api', note: `${voices.length} suara dimuat dari ElevenLabs API.` };
+  }
+
+  const c = (s.compat || []).find((x) => x.id === engineId);
+  if (!c?.base || (!c.key && !isLocal(c.base))) {
+    return { voices: OPENAI_VOICES, source: 'builtin', note: '' };
+  }
+  const base = c.base.replace(/\/+$/, '');
+  const isOfficialOpenAI = /api\.openai\.com/i.test(base);
+  try {
+    let res;
+    try {
+      res = await request(`${base}/audio/voices`, { headers: compatHeaders(c, false) }, `${c.name} Voices`, 12000);
+    } catch (e) {
+      if (e.status === 404 || e.status === 405) {
+        res = await request(`${base}/voices`, { headers: compatHeaders(c, false) }, `${c.name} Voices`, 12000);
+      } else {
+        throw e;
+      }
+    }
+    const j = await res.json();
+    if (parseVoicesPayload(j, [], { mergeFallback: false }).length) {
+      const voices = parseVoicesPayload(j, isOfficialOpenAI ? OPENAI_VOICES : [], { mergeFallback: isOfficialOpenAI });
+      return { voices, source: 'api', note: `${voices.length} suara dimuat dari ${c.name} API.` };
+    }
+  } catch {}
+  return {
+    voices: OPENAI_VOICES,
+    source: 'builtin',
+    note: isOfficialOpenAI
+      ? `OpenAI API belum punya endpoint daftar suara — menampilkan ${OPENAI_VOICES.length} suara resmi (incl. Marin & Cedar). Ketik nama/ID suara baru di bawah jika ada.`
+      : `Server ${c.name} tidak menyediakan /audio/voices — menampilkan ${OPENAI_VOICES.length} suara standar (atau ketik suara custom di bawah).`,
+  };
+}
+
+export async function softenScenePrompt(s, { prompt, visualStyle }) {
+  const out = await generateJSON(s, 'scene', `Prompt gambar berikut ditolak filter keamanan atau gagal dibuat di Google Flow (Imagen).
+Tulis ulang prompt dalam Bahasa Inggris agar aman, bebas kekerasan grafis/tokoh nyata/senjata/teks, sambil mempertahankan maksud adegan dan gaya visual: ${visualStyle?.prompt || ''}.
+
+Prompt asli: """${prompt}"""
+
+Balas HANYA JSON: {"prompt":"..."}`, (o) => typeof o?.prompt === 'string' && o.prompt.trim());
+  return out.prompt.trim();
+}
+
+export function chunkText(text, max) {
   const paras = text.split(/\n\s*\n/);
   const chunks = [];
   let cur = '';

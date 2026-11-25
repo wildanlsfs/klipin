@@ -180,13 +180,13 @@ Chrome resmi versi baru (137+) tidak lagi mengizinkan `--load-extension`, jadi p
 1. Dari Mac, kirim ZIP rilis ke VM, atau download langsung di VM:
    ```bash
    sudo -u klipin bash -c 'mkdir -p ~/klipin && cd ~/klipin && \
-     curl -L -o klipin.zip https://github.com/wildanlsfs/klipin/releases/latest/download/klipin-1.8.4.zip && unzip -o klipin.zip'
+     curl -L -o klipin.zip https://github.com/wildanlsfs/klipin/releases/latest/download/klipin-1.11.0.zip && unzip -o klipin.zip'
    ```
    Ganti nomor versi dengan yang terbaru di [Releases](https://github.com/wildanlsfs/klipin/releases/latest). Hasilnya ada di `~/klipin/klipin/`. Jalur ini yang dipasang di Chrome, jangan dihapus atau dipindah.
 2. Sambung VNC. Di Chrome buka `chrome://extensions`, nyalakan **Developer mode**, klik **Load unpacked**, pilih `/home/klipin/klipin/klipin`.
 3. Klik ikon Klipin, lalu ⚙︎ dan isi API key (Gemini untuk teks dan suara). Model bawaan: `gemini-3.8-flash`.
-4. Buka <https://flow.google.com>, **login Google lewat VNC** (manual, jangan lewat skrip), lalu buka satu project Flow dan biarkan tab itu terbuka.
-5. Uji manual satu video pendek dari panel sebelum menyerahkan ke agent.
+4. Buka <https://flow.google.com> dan <https://aistudio.google.com/generate-speech>, **login Google lewat VNC** (manual, jangan lewat skrip). Setelah login, Klipin bisa otomatis membuka/membuat project baru di Flow dan menjalankan AI Studio untuk suara gratis jika TTS API key tidak diisi.
+5. Uji manual satu video pendek dari panel (atau klik **⚡ Buat Otomatis Sampai Jadi**) sebelum menyerahkan ke agent.
 
 Update: ganti isi `~/klipin/klipin/` dengan ZIP baru, lalu klik ↻ di `chrome://extensions`.
 
@@ -211,6 +211,8 @@ Cek: tombol 🤖 di panel Klipin berpindah ke titik hijau saat agent terhubung. 
 sudo -u klipin claude -p "Pakai Klipin: tampilkan status project saat ini" \
   --allowedTools "mcp__klipin"
 ```
+
+Untuk menjalankan produksi penuh dalam satu perintah, agent cukup memanggil `klipin_run_pipeline` (sudah otomatis memilih format/gaya kreatif, suara AI Studio/API, buat project Flow baru, render MP4, dan paket publish).
 
 Jangan mengimpor atau menjalankan `server.mjs` dua kali sekaligus. Satu proses saja yang memegang port 47816.
 
@@ -272,5 +274,6 @@ sudo systemctl enable --now klipin-harian.timer
 
 - API key hanya di `chrome.storage.local` di profil VM. Jangan simpan di file skrip atau repo.
 - VNC dan port 47816 jangan dibuka ke luar VM. Akses lewat SSH tunnel.
+- Untuk memperketat bridge lokal MCP hanya ke satu ID extension Klipin tertentu, set environment `KLIPIN_EXT_ID=<id_extension>` saat menjalankan `mcp/server.mjs`.
 - Pakai satu akun Google khusus untuk Flow di server jika memungkinkan.
-- Otomasi Google Flow membaca tampilan halaman; patuhi ketentuan layanan Google Flow.
+- Otomasi Google Flow dan Google AI Studio membaca tampilan halaman; patuhi ketentuan layanan Google.

@@ -92,19 +92,19 @@ export function mapPausesThroughCuts(pauses, cuts) {
  * Potong bagian diam yang lebih panjang dari `maxPause` detik menjadi `maxPause`.
  * Ambang diam dihitung adaptif dari level suara (dB) di file itu sendiri.
  */
-export function trimSilence(audio, { maxPause = 0.35, thresholdDb = -42 } = {}) {
+export function trimSilence(audio, { maxPause = 0.35, thresholdDb = -42, edgeKeepSec = 0.15 } = {}) {
   const { samples, sampleRate } = audio;
   const { win, nWin, silent } = silenceMap(audio, thresholdDb);
 
   // Kumpulkan rentang diam (dalam jendela) yang lebih panjang dari maxPause.
   const keepWin = Math.round(maxPause / 0.01);
+  const edgeKeep = Math.max(1, Math.round(edgeKeepSec / 0.01));
   const cuts = [];
   let runStart = -1;
   for (let w = 0; w <= nWin; w++) {
     if (w < nWin && silent[w]) { if (runStart < 0) runStart = w; continue; }
     if (runStart >= 0) {
       const len = w - runStart;
-      const edgeKeep = 15; // sisakan 150 ms di awal/akhir file
       if (runStart === 0) {
         if (len > edgeKeep) cuts.push([0, w - edgeKeep]);
       } else if (w === nWin) {
@@ -147,6 +147,37 @@ export function trimSilence(audio, { maxPause = 0.35, thresholdDb = -42 } = {}) 
     removed: (samples.length - total) / sampleRate,
     cuts: cuts.map(([a, b]) => [Math.min(dur, a * 0.01), Math.min(dur, b * 0.01)]), // detik, di audio asli
   };
+}
+
+/**
+ * Normalisasi kenyaringan audio (RMS pada bagian bersuara + batas puncak agar tidak clipping).
+ */
+export function normalizeLoudness(audio, { targetRmsDb = -16, peakLimitDb = -1, maxGainDb = 18 } = {}) {
+  const { samples, sampleRate } = audio || {};
+  if (!samples?.length) return audio;
+  const { win, nWin, silent } = silenceMap(audio);
+  let sumSq = 0, activeN = 0, peak = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const a = Math.abs(samples[i]);
+    if (a > peak) peak = a;
+  }
+  if (peak < 1e-6) return audio;
+  for (let w = 0; w < nWin; w++) {
+    if (silent[w]) continue;
+    const s = w * win, e = Math.min(samples.length, s + win);
+    for (let i = s; i < e; i++) sumSq += samples[i] * samples[i];
+    activeN += e - s;
+  }
+  const rms = activeN ? Math.sqrt(sumSq / activeN) : peak * 0.5;
+  if (!Number.isFinite(rms) || rms < 1e-6) return audio;
+  const rmsDb = 20 * Math.log10(rms);
+  const gainDb = Math.min(maxGainDb, targetRmsDb - rmsDb);
+  const peakLimit = Math.pow(10, peakLimitDb / 20);
+  const gain = Math.min(Math.pow(10, gainDb / 20), peakLimit / peak);
+  if (!Number.isFinite(gain) || Math.abs(gain - 1) < 0.03) return audio;
+  const out = new Float32Array(samples.length);
+  for (let i = 0; i < samples.length; i++) out[i] = Math.max(-peakLimit, Math.min(peakLimit, samples[i] * gain));
+  return { ...audio, samples: out, sampleRate };
 }
 
 export function encodeWav({ samples, sampleRate }) {
