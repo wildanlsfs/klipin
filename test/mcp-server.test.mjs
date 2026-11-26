@@ -62,9 +62,11 @@ test('HTTP bridge enforces Host and Extension Origin checks, streams /audio/<tok
     const st = await fetch(`${base}/state`, { headers: { 'x-klipin-client': 'background' } });
     assert.equal(st.status, 200);
 
-    // Reject /poll without extension Origin
-    const noOrig = await fetch(`${base}/poll`, { headers: { 'x-klipin-client': 'panel-1' } });
-    assert.equal(noOrig.status, 403);
+    // Reject /poll with a non-extension Origin, and without the client header
+    const webOrig = await fetch(`${base}/poll`, { headers: { Origin: 'https://evil.example', 'x-klipin-client': 'panel-1' } });
+    assert.equal(webOrig.status, 403);
+    const noClient = await fetch(`${base}/poll`, { headers: { Origin: 'chrome-extension://abcdefghijklmnopabcdefghijklmnop' } });
+    assert.equal(noClient.status, 403);
 
     // Trigger klipin_load_audio, poll it from extension origin, stream /audio/<token>, and finish
     const extOrig = 'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -133,6 +135,22 @@ test('endpoint HTTP /mcp: wajib bearer token, menolak Origin browser', async () 
     assert.equal(ok.status, 200);
     assert.equal((await ok.json()).result.tools.length, TOOLS.length);
     assert.equal((await post({ authorization: `Bearer ${mcpToken(secret)}` }, { jsonrpc: '2.0', method: 'notifications/initialized' })).status, 202);
+  } finally {
+    srv.close();
+  }
+});
+
+test('endpoint panel: tanpa Origin boleh bila ada header klien; Origin web biasa & tanpa header ditolak', async () => {
+  const srv = makeServer('rahasia-tes', 0);
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const port = srv.address().port;
+  const get = (p, headers) => fetch(`http://127.0.0.1:${port}${p}`, { headers });
+  try {
+    assert.equal((await get('/state', { 'x-klipin-client': 'uji' })).status, 200);
+    assert.equal((await get('/audio/tidak-ada', { 'x-klipin-client': 'uji' })).status, 404); // lolos origin, token tak ada
+    assert.equal((await get('/audio/tidak-ada', {})).status, 403);
+    assert.equal((await get('/audio/tidak-ada', { 'x-klipin-client': 'uji', origin: 'https://evil.example' })).status, 403);
+    assert.equal((await get('/poll', { 'x-klipin-client': 'uji', origin: 'https://evil.example' })).status, 403);
   } finally {
     srv.close();
   }

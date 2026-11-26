@@ -14,7 +14,7 @@ Klik gambar di atas untuk menonton / download video tutorial (MP4, 84 detik): pa
    ke tempat tetap, mis. `Documents/Klipin`. Jangan dihapus atau dipindah setelah dipasang.
 2. Buka `chrome://extensions` → aktifkan **Developer mode** (kanan atas) → **Load unpacked** → pilih folder yang
    **langsung berisi `manifest.json`**.
-   - Windows sering membuat folder ganda saat ekstrak (mis. `klipin-1.11.1\klipin\manifest.json`); pilih folder yang di dalam.
+   - Windows sering membuat folder ganda saat ekstrak (mis. `klipin-1.11.2\klipin\manifest.json`); pilih folder yang di dalam.
 3. Klik ikon Klipin → side panel terbuka. Isi minimal satu API key di ⚙︎
    (Gemini gratis: https://aistudio.google.com/apikey). Model bawaan Gemini: `gemini-3.8-flash`.
 4. **Update:** saat ada versi baru, bilah hijau muncul di panel. Klik **Download update**, timpa folder lama dengan isi ZIP

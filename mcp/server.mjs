@@ -17,7 +17,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const PORT = Number(process.env.KLIPIN_PORT) || 47816;
-const VERSION = '1.11.1';
+const VERSION = '1.11.2';
 const CALL_WAIT_MS = Number(process.env.KLIPIN_CALL_WAIT_MS) || 50000; // batas tunggu satu panggilan tool (agent punya timeout sendiri)
 const PANEL_ALIVE_MS = 8000;
 
@@ -445,8 +445,10 @@ export function makeServer(sharedSecret, port = PORT) {
       return send(res, 200, { pending: queue.length, alive: panelAlive(), version: VERSION }, extOrigin);
     }
 
-    // endpoint panel & audio: wajib origin extension yang sah
-    if (!extOrigin) return send(res, 403, { error: 'origin' });
+    // endpoint panel & audio: header klien khusus wajib (situs web tidak bisa mengirimnya lintas origin tanpa preflight).
+    // Chrome TIDAK menyertakan Origin pada GET dari halaman extension ke host yang diizinkan, jadi tanpa Origin boleh;
+    // kalau ada Origin, harus origin extension yang sah.
+    if (origin && !extOrigin) return send(res, 403, { error: 'origin' });
 
     if (url.pathname.startsWith('/audio/') && req.method === 'GET') {
       const tok = url.pathname.slice('/audio/'.length);

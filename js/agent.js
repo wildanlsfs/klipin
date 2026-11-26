@@ -44,6 +44,7 @@ export function startAgentBridge(tools, onState) {
       let r;
       try {
         const res = await fetch(`${AGENT_URL}/poll`, { headers, cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`); // ditolak server: jangan mengulang tanpa jeda
         r = await res.json();
       } catch {
         set('offline');
