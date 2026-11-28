@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "klipin",
   "display_name": "Klipin",
-  "version": "1.11.2",
+  "version": "1.11.3",
   "description": "Make faceless YouTube videos & Shorts/Reels with the Klipin Chrome extension: brief, script, AI Studio / TTS voice, storyboard, Google Flow images, MP4 render, publish pack & thumbnail.",
   "long_description": "Connects your AI agent to the Klipin Chrome extension running on this computer. Keep Chrome open with the Klipin panel (click the Klipin icon) — the agent can run the full pipeline automatically or step-by-step: write the script, generate free voice-over in Google AI Studio or via TTS API, sync scenes, auto-create a Google Flow project and generate images, render MP4, and prepare titles, description, tags and thumbnail.",
   "author": {

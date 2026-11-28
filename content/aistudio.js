@@ -53,8 +53,15 @@
     return `${aria} ${ph} ${id} ${parent}`.toLowerCase();
   }
 
+  // Tombol/kartu "Create new dialog" (bukan "Create new voice") di galeri Generate Speech.
+  function findCreateDialogButton() {
+    return [...document.querySelectorAll('button, [role="button"], a, .card, [class*="card"]')].filter(visible)
+      .find((el) => /create new dialog/i.test(`${el.innerText || ''} ${el.getAttribute('aria-label') || ''}`)) || null;
+  }
+
   function findInputs() {
     const all = [...document.querySelectorAll('textarea, input[type="text"], [contenteditable="true"], [role="textbox"]')].filter(visible);
+    const byAria = document.querySelector('textarea[aria-label="Speech block text"]');
     let styleEl = null;
     let scriptEl = null;
     for (const el of all) {
@@ -65,6 +72,7 @@
         scriptEl = el;
       }
     }
+    if (byAria && visible(byAria)) scriptEl = byAria;
     // Fallback: textarea terbesar yang bukan styleEl adalah kolom naskah
     if (!scriptEl) {
       const cands = all.filter((el) => el !== styleEl)
@@ -178,9 +186,15 @@
 
     status('menyiapkan halaman AI Studio…');
     let inputs = findInputs();
+    let openedDialog = false;
     for (let i = 0; i < 20 && !inputs.scriptEl; i++) {
       await sleep(700);
       inputs = findInputs();
+      // Halaman Generate Speech terbaru dibuka di galeri; kolom naskah baru ada setelah "Create new dialog".
+      if (!inputs.scriptEl && !openedDialog && i >= 2) {
+        const dlg = findCreateDialogButton();
+        if (dlg) { openedDialog = true; status('membuka dialog baru…'); await clickReal(dlg, 1); await sleep(800); }
+      }
     }
     if (!inputs.scriptEl) throw new Error('Kolom naskah di AI Studio tidak ditemukan — pastikan halaman Generate Speech terbuka.');
 

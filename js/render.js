@@ -360,11 +360,28 @@ export function drawFrame(ctx, { w, h, t, timeline, cues = [], hook = null, call
   if (showSafeZone) drawSafeZoneOverlay(ctx, w, h);
 }
 
-export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtitles, hook, callouts, fileHandle, onProgress, signal }) {
+// Ekor setelah kata terakhir: gambar terakhir ditahan dan suara dibiarkan hening supaya video tidak
+// terasa terpotong tepat di akhir narasi. 0 = tanpa ekor (mode loop memakai 0 agar putaran mulus).
+export const DEFAULT_TAIL_SEC = 1.5;
+export function renderTotal(contentSec, tailSec = 0) {
+  const tail = Number.isFinite(tailSec) ? Math.min(5, Math.max(0, tailSec)) : 0;
+  return contentSec + tail;
+}
+
+// Suara dipadatkan dengan hening sampai sepanjang video, supaya trek audio dan video berakhir bersamaan.
+export function padPcm(pcm, totalSec, rate) {
+  const want = Math.ceil(totalSec * rate);
+  if (pcm.length >= want) return pcm;
+  const out = new Float32Array(want);
+  out.set(pcm);
+  return out;
+}
+
+export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtitles, hook, callouts, tailSec = 0, fileHandle, onProgress, signal }) {
   const { w, h } = outputSize(ratio, res);
   const usable = scenes.filter((s) => s.image);
   if (!usable.length) throw new RenderError('Belum ada gambar scene.', { hint: 'Buat gambar dulu di langkah 4.' });
-  const total = audio ? audio.samples.length / audio.sampleRate : scenes[scenes.length - 1].end;
+  const total = renderTotal(audio ? audio.samples.length / audio.sampleRate : scenes[scenes.length - 1].end, tailSec);
 
   // Scene tanpa gambar memakai gambar scene sebelumnya/berikutnya terdekat.
   const bitmaps = new Map();
@@ -384,7 +401,7 @@ export async function renderMp4({ scenes, audio, pauses, ratio, res, fps, subtit
     const cues = subtitles ? subtitleCues(scenes, pauses || (audio ? findPauses(audio) : [])) : [];
     onProgress?.({ phase: 'Menyiapkan audio…', pct: 0 });
     const acfg = audio ? await pickAudioConfig() : null;
-    const pcm = acfg ? (await resample(audio, AUDIO_RATE)).samples : null;
+    const pcm = acfg ? padPcm((await resample(audio, AUDIO_RATE)).samples, total, AUDIO_RATE) : null;
     const job = {
       w, h, fps, total, timeline, cues, hook: hook?.text?.trim() ? hook : null,
       callouts: (callouts || []).filter((c) => c.text?.trim() && c.end > c.start).sort((a, b) => a.start - b.start),

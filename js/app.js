@@ -5,7 +5,7 @@ import {
 import * as llm from './llm.js';
 import * as audioLib from './audio.js';
 import { scenesFromScript, scenesFromTranscript, retimeScenes, subtitleCues, fmtTime } from './scenes.js';
-import { renderMp4, outputSize, drawFrame } from './render.js';
+import { renderMp4, outputSize, drawFrame, DEFAULT_TAIL_SEC } from './render.js';
 import { kvGet, kvSet, kvDel, mediaGet, mediaSet, mediaClearProject, saveStateClean, loadStateHydrated } from './store.js';
 import { h, toast, errMsg, fillSelect } from './dom.js';
 import { checkUpdate, downloadUpdate } from './update.js';
@@ -1228,6 +1228,7 @@ async function renderVideo(fileHandle = null, onProgress = () => {}) {
     renderPreview();
     return await renderMp4({
       scenes: S.scenes, audio: currentAudio(), pauses: audioPauses(), ratio: S.ratio, res: S.res, fps: S.fps, subtitles: S.subtitles, hook, callouts,
+      tailSec: S.loop && S.minutes < 2 ? 0 : DEFAULT_TAIL_SEC,
       fileHandle, signal: renderAbort.signal,
       onProgress: ({ phase, pct, elapsed }) => {
         setProgress('#renderProgress', pct);
